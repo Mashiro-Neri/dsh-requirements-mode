@@ -146,7 +146,6 @@
             config:
               allowParallelInProgress: false
 
-          # ── 真机调查：探索子 agent（有 shell，但没有写工具）──────────────
           # ── 子 agent 运行时：必须隔离在自己的 realm 里 ────────────────────
           # 宿主根已经注册了 `subagents` 服务和名为 "spawn" 的 provider；provider 名
           # 是 realm 级唯一的，在根上再注册一次会报
@@ -157,7 +156,6 @@
           # 官方规则：preset 插件提供 service 时，必须把 provider 与它的全部
           # 消费者隔离在同一个 realm。这里把 seam + spawn 后端 + 两个消费方
           # 工具放在同一个 isolate 组里，各拿一份会话私有实例。
-          # `label: true` = 入口本地 realm，每个挂载该 preset 的会话一份私有实例。
           - id: subagent-realm
             name: cordis:group
             group: true
@@ -171,7 +169,7 @@
               - id: subagent-spawn
                 name: '@deepseek-ai/dsh-subagent-spawn-in-process'
 
-              # 真机调查：有 shell，无 write/edit
+              # 真机调查：只读探索子 agent（无 shell、无 write/edit）
               - id: tool-subagent-explore
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
