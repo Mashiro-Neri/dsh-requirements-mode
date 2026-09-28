@@ -29,7 +29,25 @@
 
 ## 安装
 
-需要 DSH 0.1.7-rc.2（实测可用），安装时要 Full access 权限或者允许审批。
+需要 DSH（DeepSeek Harness）。安装时要 Full access 权限，或者允许审批。
+
+关于版本：这套东西在 **0.1.7-rc.2** 上完整跑通过。**0.2.0-rc.1** 我核对过它用到的所有接口，没有发现变化（见下面的说明），但**没有在那一版上实际运行过**——如果你在 0.2.0-rc.1 上遇到问题，开个 issue 告诉我。
+
+<details>
+<summary>0.2.0-rc.1 都核对了什么</summary>
+
+逐项对着两版的包源码比过：
+
+- `dsh-tool-subagent-control` 的 `send_message` 参数仍是 `agent_id` + `message`（整个模式的子 Agent 通信靠它）
+- `dsh-tool-subagent` 的配置字段一致：`provider` / `toolName` / `backgroundMode` / `enableRunInBackground` / `persona` / `toolFilter` / `maxDepth` / `agentOptions`
+- `dsh-skill-filesystem` 仍有 `customSkillDirs` / `includeDefaultRoots` / `bundledSkillDir`
+- 用到的 13 个 `@deepseek-ai/dsh-*` 包在 0.2.0-rc.1 下都存在
+
+没验证的部分：preset 挂载、`isolate` 作用域、工具过滤这些**运行时行为**。这些只有真跑起来才知道。
+
+顺带一提，这些包的 peer 依赖写的是**精确版本**（比如 `@deepseek-ai/dsh-subagent: 0.2.0-rc.1`），所以 preset 里的插件行必须和运行时同版本。正常安装时 pnpm 会解析成同一版，不用你操心。
+
+</details>
 
 另外：**要先关掉「智能体团队」插件**，原因写在下面「注意事项」里。
 
