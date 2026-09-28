@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-community/dsh-requirements-mode",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "需求确认模式（Requirements mode）：把《项目需求确认工作流 V2》做成 DSH 里一个可选 agent preset——只讨论、只澄清、只产出开发文档，不进入实现。",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-bundle",
+    "agent-preset",
+    "requirements",
+    "deepseek-harness"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "skills",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

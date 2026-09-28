@@ -1,0 +1,14 @@
+# Build output (regenerate with scripts/build-package.ps1)
+dist/
+
+# Package manager
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

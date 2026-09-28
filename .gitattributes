@@ -1,0 +1,10 @@
+# Normalize line endings: keep LF in the repository for every text file.
+# Without this, Windows checkouts may commit CRLF, which can surprise
+# non-Windows users and tools that parse cordis.patch.yml or the skill files.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.ico binary
+*.jpg binary
+*.webp binary

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Requirements Mode">
+  <title>需求确认模式 / Requirements Mode</title>
+  <desc>A check mark above a broken baseline: clarified and confirmed, and it stops here instead of moving on to implementation.</desc>
+
+  <!--
+    Original artwork, MIT licensed with this repository. No third-party assets.
+    Concept: the broken baseline means "stop here — do not start implementing";
+    the check above it means "requirements confirmed".
+  -->
+  <rect width="128" height="128" rx="28" fill="#0d1117"/>
+
+  <!-- confirmed -->
+  <path d="M40 62 L57 79 L90 44" fill="none" stroke="#4ade80"
+        stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- stop here (deliberate gap = the boundary) -->
+  <path d="M34 99 H58" fill="none" stroke="#8b949e"
+        stroke-width="8" stroke-linecap="round"/>
+  <path d="M70 99 H94" fill="none" stroke="#8b949e"
+        stroke-width="8" stroke-linecap="round"/>
+</svg>
