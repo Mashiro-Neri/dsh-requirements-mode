@@ -1,78 +1,92 @@
-# 需求确认模式 · Requirements Mode
+# Requirements Mode
 
 <img src="assets/icon-512.png" width="88" align="right" alt="Requirements Mode icon">
 
-给 DSH（DeepSeek Harness）加一个只讨论、不写代码的模式。
+**English** · [中文](README.zh.md)
+
+A mode for DSH (DeepSeek Harness) that only discusses — it doesn't write code.
 
 <br clear="right">
 
-## 为什么写这个
+## Why this exists
 
-平时用 AI 聊需求，最常见的毛病是它太急着动手。你说"我想做个桌面待办"，它转头就去建目录、装依赖、写代码，而你其实只想先把这东西到底长什么样、每天怎么用聊清楚。
+The most common problem when talking through a feature with an AI is that it's in too much of a hurry. You say "I want to build a desktop todo app" and it immediately starts creating directories, installing dependencies, writing code — when what you actually wanted was to figure out what the thing looks like and how you'd use it every day.
 
-这个模式就是把那一步单独摘出来：先聊透，再落成一份文档，然后停下。
+This mode pulls that step out on its own: talk it through properly, write it down as a document, then stop.
 
-顺便说一句出处：需求确认这套流程不是我想出来的，是参考 **Oh My OpenCode** 插件的需求确认模式做的。我觉得那个思路对，就把它搬到了 DSH 上，并根据 DSH 能提供的东西做了些调整。
+Credit where it's due: the requirements-confirmation flow isn't my idea. It comes from the **Oh My OpenCode** plugin's requirements-confirmation mode. The approach seemed right, so I ported it to DSH and adjusted it around what DSH actually provides.
 
-## 它做什么
+## What it does
 
-普通模式下，Agent 有完整的工具集，默认行为是尽快交付可运行的东西。
+In the normal mode an agent has the full toolset and defaults to shipping something runnable as fast as possible.
 
-选了这个模式之后：
+Pick this mode instead and:
 
-- 没有 shell。装依赖、起服务、改系统这些事它做不了，因为工具集里根本没这些工具，不是靠提示词约束它别做
-- 不会随手写文件。整场对话只在最后产出一份开发文档
-- 行为从"尽快给代码"变成"先问清楚，再汇总，等你确认，然后写文档"
-- 多两个环节：一个负责实地调查的子 Agent，一个负责挑毛病的子 Agent
+- There's no shell. Installing dependencies, starting services, changing system settings — it can't do any of that, because those tools aren't in its toolset at all. It isn't being asked nicely to hold back.
+- It doesn't scatter files around. Across the whole conversation it produces exactly one document, at the end.
+- Its behaviour shifts from "give me code" to "clarify, summarise, wait for your confirmation, then write the document."
+- Two extra roles show up: a sub-agent that goes and investigates, and one that looks for holes.
 
-它不是一个提示词片段，而是一个完整的模式。身份、工具集、子 Agent 都在会话创建时定好，不依赖模型每次自觉。
+It isn't a prompt snippet — it's a full mode. Its identity, toolset and sub-agents are fixed when the session is created, rather than depending on the model remembering to behave.
 
-## 安装
+## Built specifically for DSH
 
-需要 DSH（DeepSeek Harness）。安装时要 Full access 权限，或者允许审批。
+This is not a portable prompt. It leans on DSH internals, and most of it wouldn't translate to another tool as-is.
 
-关于版本：这套东西在 **0.1.7-rc.2** 上完整跑通过。**0.2.0-rc.1** 我核对过它用到的所有接口，没有发现变化（见下面的说明），但**没有在那一版上实际运行过**——如果你在 0.2.0-rc.1 上遇到问题，开个 issue 告诉我。
+- **The mode is a real agent preset**, declared by a bundle patch (`cordis.patch.yml`). Identity, toolset and sub-agents are composed at session creation. Nothing is bolted on at runtime.
+- **The "can't write code" guarantee is structural, not textual.** The shell tools are simply absent from the preset. There's no prompt saying "please don't install dependencies".
+- **The sub-agent runtime lives in its own isolated realm** (`isolate: {subagents: true}`), plus the matching `send_message` control tools. Both are component parts this mode mounts for itself.
+- **The four skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
+- **The reviewer's toolset is narrowed by `toolFilter`**, so it can read but not write and cannot run commands.
+
+Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history.
+
+## Install
+
+You need DSH (DeepSeek Harness), and Full access or approval enabled for the install.
+
+On versions: this was tested end to end on **0.1.7-rc.2**. I checked every interface it uses against **0.2.0-rc.1** and found no changes (details below), but I haven't actually run it on that version — if you hit problems there, please open an issue.
 
 <details>
-<summary>0.2.0-rc.1 都核对了什么</summary>
+<summary>What was checked for 0.2.0-rc.1</summary>
 
-逐项对着两版的包源码比过：
+Compared against both versions' package sources:
 
-- `dsh-tool-subagent-control` 的 `send_message` 参数仍是 `agent_id` + `message`（整个模式的子 Agent 通信靠它）
-- `dsh-tool-subagent` 的配置字段一致：`provider` / `toolName` / `backgroundMode` / `enableRunInBackground` / `persona` / `toolFilter` / `maxDepth` / `agentOptions`
-- `dsh-skill-filesystem` 仍有 `customSkillDirs` / `includeDefaultRoots` / `bundledSkillDir`
-- 用到的 13 个 `@deepseek-ai/dsh-*` 包在 0.2.0-rc.1 下都存在
+- `dsh-tool-subagent-control`'s `send_message` still takes `agent_id` + `message` (the sub-agent messaging this whole mode depends on)
+- `dsh-tool-subagent` config fields are unchanged: `provider` / `toolName` / `backgroundMode` / `enableRunInBackground` / `persona` / `toolFilter` / `maxDepth` / `agentOptions`
+- `dsh-skill-filesystem` still has `customSkillDirs` / `includeDefaultRoots` / `bundledSkillDir`
+- All 13 `@deepseek-ai/dsh-*` packages it uses exist at 0.2.0-rc.1
 
-没验证的部分：preset 挂载、`isolate` 作用域、工具过滤这些**运行时行为**。这些只有真跑起来才知道。
+Not verified: the runtime behaviour — preset mounting, `isolate` scoping, tool filtering. Those only show up when you actually run it.
 
-顺带一提，这些包的 peer 依赖写的是**精确版本**（比如 `@deepseek-ai/dsh-subagent: 0.2.0-rc.1`），所以 preset 里的插件行必须和运行时同版本。正常安装时 pnpm 会解析成同一版，不用你操心。
+One thing worth knowing: these packages pin their peers to **exact versions** (e.g. `@deepseek-ai/dsh-subagent: 0.2.0-rc.1`), so the plugin rows in a preset have to match the runtime version. A normal install resolves this for you.
 
 </details>
 
-另外：**要先关掉「智能体团队」插件**，原因写在下面「注意事项」里。
+One more thing: **turn off the "Agent Teams" plugin first** — the reason is under [Notes](#notes).
 
-### 让 DSH 自己装
+### Let DSH install it
 
-新开一个会话（标准模式就行），把这段话发给它：
+Start a new session (standard mode is fine) and send it this:
 
 ```
-把 https://github.com/Mashiro-Neri/dsh-requirements-mode 作为插件组合包安装到当前 profile，
-装完告诉我它装了哪些 preset 和技能。
+Install https://github.com/Mashiro-Neri/dsh-requirements-mode as a plugin bundle into the current profile,
+then tell me which presets and skills it added.
 ```
 
-装完完全重启一次 DSH。
+Restart DSH completely afterwards.
 
-### 命令行装
+### From the command line
 
 ```bash
 dsh plugin --profile desktop add github:Mashiro-Neri/dsh-requirements-mode
 ```
 
-`desktop` 换成你自己的 profile 名。
+Replace `desktop` with your own profile name.
 
-### 手动指定
+### Point at the repo directly
 
-在 DSH 里让它调用：
+Ask DSH to call:
 
 ```
 plugin_manager
@@ -80,129 +94,129 @@ plugin_manager
   target: github:Mashiro-Neri/dsh-requirements-mode
 ```
 
-### 装好之后怎么确认
+### Confirming it worked
 
-打开 设置 →「模式」，应该能看到一张叫「需求确认」的卡片。
+Open Settings → Modes. You should see a card named "需求确认" (Requirements).
 
-如果没看到，看那张卡是不是红色的"加载失败"，怎么查写在「遇到问题」里。
+If you don't, check whether the card is red and marked as failed to load — see [Troubleshooting](#troubleshooting).
 
-## 怎么用
+## Using it
 
-新建会话，在欢迎页的模式选择那里选「需求确认」。
+Start a new session and pick "需求确认" from the mode selector on the welcome screen.
 
-注意这一步必须在发第一条消息之前做完，会话的模式是创建时确定的，中途改不了。
+This has to be done before the first message — a session's mode is fixed at creation and can't be changed later.
 
-然后正常说你的想法就行，比如：
+Then just describe what you want, for example:
 
 ```
-我想做一个跨端书签同步工具，先聊方案，别写代码。
+I want to build a cross-platform bookmark sync tool. Let's talk through the approach first, don't write code.
 ```
 
-接下来它会复述一遍对你的理解，比较几种做法的可行性，问几个关键问题（一次不会问太多），把你可能没考虑到的细节补上，最后汇总一遍问你要不要改。
+From there it will restate its understanding of your goal, compare a few approaches for feasibility, ask a small number of key questions (it won't dump a questionnaire on you), fill in details you hadn't thought about, and finally summarise everything and ask whether you want changes.
 
-等你说"可以整理开发文档"之后，它会先写个草稿，交给另一个 Agent 挑毛病，把意见报给你，改到没问题了才写文件。
+Once you say something like "go ahead and write the document", it drafts one first, hands it to another agent to pick apart, reports those findings back to you, and only writes the file once they're resolved.
 
-文档写完它就停下了，会提醒你下一步是进 plan 模式做实施方案。
+After the document is written it stops, and points you at plan mode for the implementation plan.
 
-想让它变成新会话的默认模式，在 设置 →「模式」里设成默认。不过如果平时主要是写代码，建议还是留在标准模式。
+To make it the default for new sessions, set it in Settings → Modes. Though if you mostly write code, I'd leave the standard mode as default.
 
-## 装了些什么
+## What's in it
 
-一个模式，包含：
+One mode, containing:
 
-- 一份常驻的工作流说明（核心原则、权限边界、讨论流程、复核环节、后续衔接），大约 3300 字，每个请求都会带上
-- 一套只读工具：读文件、找文件、搜内容、联网搜索、联网取页、向你提问、加载技能、记录待确认清单
-- 唯一的写权限：写完那份开发文档
-- 没有 shell
-- 两个子 Agent（下面单独讲）
+- A standing workflow description (core principles, permission boundaries, the discussion phases, the review step, what comes after) — around 3,300 characters, carried on every request
+- A read-only toolset: read files, find files, search contents, web search, fetch pages, ask you questions, load skills, track a to-confirm list
+- One write permission: writing that final document
+- No shell
+- Two sub-agents (below)
 
-另外附带四个技能，安装时一起装好，用到才会加载：
+It also brings four skills, installed alongside and loaded only when needed:
 
-- `requirements-refinement`：讨论前期怎么比较方案、怎么实地调查、改了一处怎么保持文档一致
-- `requirements-clarification-checklist`：按项目类型列出容易漏掉的问题
-- `requirements-questioning-ledger`：怎么提问、怎么记录"已经确认过什么"
-- `requirements-doc-template`：文档的固定结构和交付前的自查清单
+- `requirements-refinement` — how to compare approaches early on, how to investigate on the ground, how to keep the document consistent when something changes
+- `requirements-clarification-checklist` — questions that are easy to miss, by project type
+- `requirements-questioning-ledger` — how to ask, and how to record what's actually been confirmed
+- `requirements-doc-template` — the fixed document structure and a pre-delivery checklist
 
-## 两个子 Agent
+## The two sub-agents
 
-第一个负责调查。需要知道"这台机器实际是什么情况""这个代码库现在长什么样"的时候，主 Agent 会派它去查。它只能读文件，没有 shell，所以查不到的东西会如实说查不到，并给出建议你执行的命令，而不是猜。
+The first one investigates. When the main agent needs to know what a machine actually looks like, or how an existing codebase is really structured, it sends this one to find out. It can only read files and has no shell, so anything it can't reach it reports as unreachable, along with a command you could run yourself — rather than guessing.
 
-它有个规矩我觉得挺有用：必须把原始证据带回来，并且把"亲眼看到的"和"自己的推断"分开写。
+It follows a rule I find genuinely useful: bring back the raw evidence, and keep "what I saw" separate from "what I inferred".
 
-第二个负责挑毛病。文档草稿写完后交给它，它的任务是找出"看着像已确认、其实是推测"的地方。
+The second one looks for holes. Once a draft exists it goes to this agent, whose job is to find places that *look* confirmed but are actually assumptions.
 
-它有几个刻意的设定：看不到你和主 Agent 的对话，所以拿不准的会列成"待澄清"问你，而不是自己瞎判；工具被限制成只读，读得到、写不了、跑不了命令；不能替你做决定，发现"这该你定"只能写进报告让主 Agent 转达。
+A few deliberate choices here: it can't see your conversation with the main agent, so anything it's unsure about gets listed as "needs clarification" instead of being decided unilaterally; its tools are read-only, so it can read but not write or run commands; and it can't make decisions for you — when it finds something that's yours to decide, that goes in the report for the main agent to relay.
 
-如果主 Agent 觉得某条意见不对，可以给它解释。它要么明确撤回并说明理由成立，要么说明你缺了哪一环所以不能撤回。来回最多两轮，还有分歧就交给你判断。
+If the main agent thinks a finding is wrong, it can explain why. The reviewer either withdraws it explicitly and says the reasoning holds, or says which piece of context is missing and why it can't withdraw. Two rounds at most; anything still disputed goes to you.
 
-## 后续衔接
+## What comes after
 
-文档交付后不会自动往下走，中间还有两道关：
+Delivering the document doesn't roll into anything. There are two more gates:
 
-1. 需求确认（就是这个模式）→ 产出开发文档，你确认方向
-2. 计划（plan 模式）→ 产出实施方案，你批准
-3. 实现（标准模式的新会话）→ 写代码，你提出开发请求
+1. Requirements (this mode) → produces the development document, you confirm the direction
+2. Planning (plan mode) → produces an implementation plan, you approve it
+3. Implementation (a fresh standard-mode session) → writes the code, you ask for it
 
-每一段做完都停下等你，不会自己往下走。
+Each stage stops and waits for you. Nothing proceeds on its own.
 
-## 注意事项
+## Notes
 
-**必须先关掉「智能体团队」插件**（`@deepseek-ai/dsh-experimental-agent-team-profile`）。
+**You must turn off the "Agent Teams" plugin** (`@deepseek-ai/dsh-experimental-agent-team-profile`).
 
-原因是这样：这个模式靠 `send_message` 跟子 Agent 对话，而 DSH 自带的那份 `send_message` 参数是 `agent_id`。「智能体团队」插件会把同名的工具覆盖成它自己的版本，参数变成 `target`，只能给队友发消息。覆盖之后，调查员和复核者就没法接着聊了，只能一问一答各起一个新的。
+Here's why. This mode talks to its sub-agents through `send_message`, and the one DSH ships takes a parameter named `agent_id`. The Agent Teams plugin overrides that same tool name with its own version, whose parameter is `target` and which only delivers to teammates. Once overridden, the investigator and the reviewer can't be talked to any further — you'd have to start a fresh one for every single exchange.
 
-关掉的办法：设置 → 插件 → 关掉「智能体团队」的开关 → 重启 DSH。
+To turn it off: Settings → Plugins → switch Agent Teams off → restart DSH.
 
-代价是会失去 `spawn_teammate`、团队任务板和团队面板。想恢复的话把开关打开再重启就行。
+The cost is losing `spawn_teammate`, the shared task board and the team panel. Turning it back on and restarting restores them.
 
-怎么判断自己踩到了这个问题：如果你手上的 `send_message` 参数是 `target`，报错里出现 `active teammate "<id>" not found`，那就是被覆盖了。
+To tell whether you've hit this: if your `send_message` takes `target` and errors with `active teammate "<id>" not found`, it's been overridden.
 
-## 已知的不足
+## Known limitations
 
-**这个模式里没有 shell**，这是刻意的取舍。所以像"本机装的是哪个版本""某个端口通不通"这种必须跑命令才知道的事，调查员会明确说查不到，然后给出建议命令让你自己跑。
+**There's no shell in this mode**, deliberately. So for things that can only be learned by running a command — which version is installed, whether a port is open — the investigator says plainly that it can't tell, and gives you a command to run instead.
 
-**子 Agent 看不到你和主 Agent 的对话**，所以每次派活都要把背景重新讲一遍。好处是它不会瞎猜你的上下文。
+**Sub-agents can't see your conversation with the main agent**, so every task you hand them has to restate the background. The upside is they won't guess at context they don't have.
 
-**`send_message` 有个时序限制**：调查员正在跑的时候投递不过去，会报 `subagent "<id>" is unavailable`。这不是出错了，等它这一轮结束再发就行。所以节奏是派活、等回报、再派下一条。
+**`send_message` has a timing constraint**: you can't deliver while the investigator is running — it returns `subagent "<id>" is unavailable`. That's not a failure, just wait for the current round to finish. So the rhythm is: assign, wait for the report, assign again.
 
-**那份常驻的工作流说明每个请求都要带**，大约 3300 字，是有成本的。取舍的理由是硬约束和流程骨架必须一直在场，细节才按需加载。
+**The standing workflow description rides on every request**, around 3,300 characters. That costs tokens. The tradeoff is that hard constraints and the process skeleton have to be present at all times, while the details are loaded on demand.
 
-## 遇到问题
+## Troubleshooting
 
-### 模式列表里没有「需求确认」
+### "需求确认" isn't in the mode list
 
-模式列表只显示能正常加载的模式，如果加载失败它会直接不显示，不会有任何提示。
+The mode list only shows modes that load cleanly. If one fails, it simply doesn't appear — no error, nothing.
 
-去 设置 →「模式」页面看那张卡片。如果卡片是红的、带"加载失败"标记，鼠标悬停上去就能看到真正的原因。**这是唯一能看到错误信息的地方。**
+Go to Settings → Modes and look at the card. If it's red and marked as failed to load, hover over that marker to see the actual reason. **That's the only place the error text is visible.**
 
-几种常见的原因：
+Some common causes:
 
-- `service "subagents" has been registered at <SubagentRuntime>`：有个提供服务的插件行挂错了位置，和系统里已有的撞名了
-- `tools.restrict() names unknown global tools "..."`：给子 Agent 设的工具白名单里写了不存在的工具名
-- `skill "xxx" is unknown or no longer available`：技能加载器没挂上
-- `active teammate "<id>" not found`：调到了「智能体团队」的 `send_message`，关掉那个插件
+- `service "subagents" has been registered at <SubagentRuntime>` — a row that provides a service is mounted in the wrong place and collides with one that already exists
+- `tools.restrict() names unknown global tools "..."` — a sub-agent's tool allowlist names a tool that doesn't exist in that scope
+- `skill "xxx" is unknown or no longer available` — the skill loader isn't mounted
+- `active teammate "<id>" not found` — you're calling Agent Teams' `send_message`; turn that plugin off
 
-### 子 Agent 行为不对
+### Sub-agent behaviour looks wrong
 
-先确认当前会话确实是「需求确认」模式（看会话上方的模式标识）。然后看它手上的 `send_message` 参数是 `agent_id` 还是 `target`，后者说明被覆盖了。
+First confirm the session really is in Requirements mode (check the mode label at the top). Then check whether its `send_message` takes `agent_id` or `target` — the latter means it's been overridden.
 
-### 安装时报 git 或 SSL 错误
+### git or SSL errors during install
 
-这个仓库是安装时按需从 GitHub 拉的，所以本机 git 得能访问 GitHub。两个常见情况：
+This repo is cloned from GitHub at install time, so your local git needs to be able to reach it. Two common cases:
 
-如果报 `Host key for github.com has changed` 之类的，是 SSH 的主机密钥过期了，可以改成走 HTTPS：
+If you see `Host key for github.com has changed` or similar, your SSH host key is stale. Switch to HTTPS:
 
 ```bash
 git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 ```
 
-如果报 `SSL certificate problem: unable to get local issuer certificate`，是 Git 自带的证书包太旧了，改用系统的证书库：
+If you see `SSL certificate problem: unable to get local issuer certificate`, Git's bundled CA store is out of date. Use the system one instead:
 
 ```bash
 git config --global http.sslBackend schannel
 ```
 
-## 卸载
+## Uninstall
 
 ```
 plugin_manager
@@ -210,35 +224,35 @@ plugin_manager
   target: @dsh-community/dsh-requirements-mode
 ```
 
-四个技能会跟着一起移除，不用另外清理。
+The four skills go with it; nothing to clean up separately.
 
-## 目录结构
+## Layout
 
 ```
 .
-├── package.json            声明这是个 DSH 组合包
-├── cordis.patch.yml        插件的实际内容，就一条声明
-├── skills/                 四个技能
+├── package.json            declares this as a DSH bundle
+├── cordis.patch.yml        the actual plugin: a single declaration
+├── skills/                 the four skills
 ├── scripts/
-│   └── build-package.ps1   打成 dist/*.tgz
+│   └── build-package.ps1   packs dist/*.tgz
 ├── assets/
-│   ├── icon.svg            图标，原创，随本仓库 MIT 授权
+│   ├── icon.svg            original icon, MIT with this repo
 │   └── icon-512.png
 ├── LICENSE
 └── README.md
 ```
 
-## 自己改和打包
+## Hacking on it
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build-package.ps1
 ```
 
-会在 `dist/` 下生成 tgz 和对应的 SHA256。
+Produces a tgz and its SHA256 under `dist/`.
 
-脚本特意只用 ASCII 字符：Windows PowerShell 5.1 读取没有 BOM 的文件时会按系统代码页解码，写中文会直接报语法错误。
+The script is deliberately ASCII-only: Windows PowerShell 5.1 decodes BOM-less files using the system codepage, and non-ASCII characters break it outright.
 
-改完之后，预设和技能的目录结构变化需要重启 DSH 才生效；技能正文是改完就热加载的。验证方法是新建一个会话，看模式标识和工具列表对不对。
+After changing things, structural changes to the preset or skills need a DSH restart; skill bodies are hot-reloaded. To verify, start a new session and check the mode label and tool list.
 
 ## License
 

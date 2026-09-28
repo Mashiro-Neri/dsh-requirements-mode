@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "需求确认模式（Requirements mode）：把《项目需求确认工作流 V2》做成 DSH 里一个可选 agent preset——只讨论、只澄清、只产出开发文档，不进入实现。",
+  "description": "Requirements mode for DSH: a discuss-only agent preset that clarifies a feature and produces a development document without starting implementation. 需求确认模式。",
   "license": "MIT",
   "keywords": [
     "dsh",
@@ -19,7 +19,8 @@
   "files": [
     "cordis.patch.yml",
     "skills",
-    "README.md"
+    "README.md",
+    "README.zh.md"
   ],
   "dsh": {
     "bundle": {
