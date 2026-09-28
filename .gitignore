@@ -12,3 +12,6 @@ pnpm-lock.yaml
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 个人设计记录，不发布
+docs/
