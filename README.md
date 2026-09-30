@@ -200,6 +200,8 @@ Some common causes:
 
 First confirm the session really is in Requirements mode (check the mode label at the top). Then check whether its `send_message` takes `agent_id` or `target` — the latter means it's been overridden.
 
+If a sub-agent simply can't be created, the allow-list is the first thing to suspect, and the real error is only in the session log. After a DSH upgrade this is the most likely breakage: the set of registered tools can change, and a name that used to be valid then throws. `node scripts/check-tool-filter.cjs` catches it before you run anything.
+
 ### git or SSL errors during install
 
 This repo is cloned from GitHub at install time, so your local git needs to be able to reach it. Two common cases:
@@ -250,7 +252,15 @@ powershell -ExecutionPolicy Bypass -File scripts/build-package.ps1
 
 Produces a tgz and its SHA256 under `dist/`.
 
-The script is deliberately ASCII-only: Windows PowerShell 5.1 decodes BOM-less files using the system codepage, and non-ASCII characters break it outright.
+There's also a check worth running after touching the preset:
+
+```bash
+node scripts/check-tool-filter.cjs
+```
+
+It verifies that every name in a sub-agent's `toolFilter.allow` is actually a tool this preset can see. Get one wrong and `tools.restrict()` throws, the sub-agent can't be created at all, and all you see is that the mode "doesn't work" — the real error only lands in the session log. Three different names have caused this already, which is why it's a script now rather than a note in the comments.
+
+Both scripts are deliberately ASCII-only: Windows PowerShell 5.1 decodes BOM-less files using the system codepage, and non-ASCII characters break it outright.
 
 After changing things, structural changes to the preset or skills need a DSH restart; skill bodies are hot-reloaded. To verify, start a new session and check the mode label and tool list.
 

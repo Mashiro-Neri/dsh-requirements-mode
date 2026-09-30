@@ -200,6 +200,8 @@ plugin_manager
 
 先确认当前会话确实是「需求确认」模式（看会话上方的模式标识）。然后看它手上的 `send_message` 参数是 `agent_id` 还是 `target`，后者说明被覆盖了。
 
+如果子 Agent 是**根本创建不出来**，第一个要怀疑的就是那个工具白名单，而真正的报错只在会话日志里。升级 DSH 之后这是最容易出问题的地方：已注册的工具集合会变，以前合法的名字可能就抛错了。跑一下 `node scripts/check-tool-filter.cjs` 能在用之前就发现。
+
 ### 安装时报 git 或 SSL 错误
 
 这个仓库是安装时按需从 GitHub 拉的，所以本机 git 得能访问 GitHub。两个常见情况：
@@ -251,7 +253,15 @@ powershell -ExecutionPolicy Bypass -File scripts/build-package.ps1
 
 会在 `dist/` 下生成 tgz 和对应的 SHA256。
 
-脚本特意只用 ASCII 字符：Windows PowerShell 5.1 读取没有 BOM 的文件时会按系统代码页解码，写中文会直接报语法错误。
+改过 preset 之后还建议跑一个检查：
+
+```bash
+node scripts/check-tool-filter.cjs
+```
+
+它检查子 Agent 的 `toolFilter.allow` 里每个名字，是不是这个 preset 真能看到的工具。写错一个，`tools.restrict()` 就会抛错，子 Agent 根本创建不出来，而你看到的只是"这个模式不好使"——真正的报错只落在会话日志里。已经有三批名字踩过这个坑了，所以它现在是个脚本，不再是注释里的一句提醒。
+
+两个脚本都特意只用 ASCII 字符：Windows PowerShell 5.1 读取没有 BOM 的文件时会按系统代码页解码，写中文会直接报语法错误。
 
 改完之后，预设和技能的目录结构变化需要重启 DSH 才生效；技能正文是改完就热加载的。验证方法是新建一个会话，看模式标识和工具列表对不对。
 

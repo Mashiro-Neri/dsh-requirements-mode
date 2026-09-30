@@ -201,15 +201,15 @@
                     3. 推断（明确标注哪些是推断、依据是什么）
                     4. 未能确认的部分（缺什么、为什么缺；需要跑命令才能得到的，给出建议命令）
                   toolFilter:
-                    # 两条铁律，都已实测踩过：
-                    # 1) 必须写**已注册的全局工具名**（read / glob / grep），不是插件行名
-                    #    （tool-fs）。写插件名不会报错，只会让子 agent 变成没有工具的瞎子。
-                    # 2) 不能写**本作用域里不存在**的名字。写别的 preset 才有的工具会让
-                    #    tools.restrict() 直接抛错，并让整份 preset broken：
-                    #    Error: tools.restrict() names unknown global tools "pwsh", "bash"
-                    # 本 preset 不挂 shell，所以这里绝不能出现 pwsh / bash。
-                    # write / edit 故意不在名单里 —— 调查员改不了文件。
-                    allow: ['read', 'read_image', 'glob', 'grep', 'read_mcp_resource', 'list_mcp_resources', 'list_mcp_resource_templates']
+                    # 这个名单只能写**本会话实际注册过的**全局工具名。踩过两次：
+                    # 1) 写插件行名（tool-fs）不会报错，只会让子 agent 没有工具可用。
+                    # 2) 写本作用域不存在的名字会让 tools.restrict() 直接抛错，子 agent
+                    #    根本创建不出来：
+                    #      names unknown global tools "pwsh", "bash"            （本 preset 不挂 shell）
+                    #      names unknown global tools "read_mcp_resource", ...  （MCP 资源工具不在 preset 作用域）
+                    # MCP 资源工具由 web 层的 mcp-resources 提供，preset 作用域里看不到它们，
+                    # 所以这里绝不能写。write / edit 故意不在名单里 —— 调查员改不了文件。
+                    allow: ['read', 'read_image', 'glob', 'grep']
 
           # ── 控制类工具：send_message / interrupt_agent / list_agents ──────
           # 必须放在 preset **顶层**，不能塞进上面的 isolate 组。
@@ -280,7 +280,8 @@
 
                 你没有 shell 和写权限；需要用户裁决的照样写进"需用户裁决"。
               toolFilter:
-                # 只写已注册的全局工具名（写不存在的名字会让 restrict() 抛错）。
-                # 复核者：无 shell、无 write/edit。
-                allow: ['read', 'read_image', 'glob', 'grep', 'read_mcp_resource', 'list_mcp_resources', 'list_mcp_resource_templates']
+                # 只写本会话实际注册过的全局工具名。写错会让子 agent 直接创建失败
+                # （详见调查员那段的注释）。
+                # 复核者：无 shell、无 write/edit、无 MCP 资源工具。
+                allow: ['read', 'read_image', 'glob', 'grep']
 
