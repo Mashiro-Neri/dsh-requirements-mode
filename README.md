@@ -132,12 +132,15 @@ One mode, containing:
 - One write permission in practice: writing that final document
 - Two sub-agents (below), which this preset mounts itself along with their runtime
 
-It also brings four skills, installed alongside and loaded only when needed:
+It also brings five skills, installed alongside and loaded only when needed:
 
 - `requirements-refinement` — how to compare approaches early on, how to investigate on the ground, how to keep the document consistent when something changes
 - `requirements-clarification-checklist` — questions that are easy to miss, by project type
 - `requirements-questioning-ledger` — how to ask, and how to record what's actually been confirmed
 - `requirements-doc-template` — the fixed document structure and a pre-delivery checklist
+- `requirements-subagent-protocol` — how to create and talk to the two sub-agents: which argument, the delivery timing, and what each error actually means
+
+The split is deliberate. The standing workflow description only carries principles and the shape of the process; anything that is mechanical — an argument name, a timing rule, an error table — lives in a skill and is loaded when it is actually needed. That keeps the per-request cost down without dropping the rules.
 
 ## The two sub-agents
 

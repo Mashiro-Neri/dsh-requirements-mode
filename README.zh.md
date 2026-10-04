@@ -132,12 +132,15 @@ plugin_manager
 - 实际上的唯一写权限：写完那份开发文档
 - 两个子 Agent（下面单独讲），它们的运行时由这个 preset 自己挂载
 
-另外附带四个技能，安装时一起装好，用到才会加载：
+另外附带五个技能，安装时一起装好，用到才会加载：
 
 - `requirements-refinement`：讨论前期怎么比较方案、怎么实地调查、改了一处怎么保持文档一致
 - `requirements-clarification-checklist`：按项目类型列出容易漏掉的问题
 - `requirements-questioning-ledger`：怎么提问、怎么记录"已经确认过什么"
 - `requirements-doc-template`：文档的固定结构和交付前的自查清单
+- `requirements-subagent-protocol`：怎么创建和派活给两个子 Agent——参数名、投递时序、以及每种报错到底是什么意思
+
+这个拆分是刻意的。常驻的工作流说明只保留原则和流程骨架；凡是机械性的东西——参数名、时序规则、报错对照表——都放进技能，真正用到时才加载。这样每次请求的成本降下来，规则本身并没有少。
 
 ## 两个子 Agent
 
