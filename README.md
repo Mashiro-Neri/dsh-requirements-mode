@@ -22,11 +22,13 @@ In the normal mode an agent has the full toolset and defaults to shipping someth
 
 Pick this mode instead and:
 
-- **The main agent itself has no shell.** Installing dependencies, starting services, changing system settings — it can't do any of that, because those tools aren't in its toolset at all. It isn't being asked nicely to hold back.
-- **The sub-agents it spawns do have shell, and write/edit.** That boundary is about what gets produced, not about what can be looked up: investigation can act, producing deliverables can't.
-- It doesn't scatter files around. Across the whole conversation it produces exactly one document, at the end.
-- Its behaviour shifts from "give me code" to "clarify, summarise, wait for your confirmation, then write the document."
+- Its default behaviour shifts from "give me code" to "clarify, summarise, wait for your confirmation, then write the document."
+- Nothing gets written during the discussion. Across the whole conversation it produces exactly one document, at the end.
 - Two extra roles show up: a sub-agent that goes and investigates, and one that looks for holes.
+
+**The toolset is not actually reduced**, and it's worth being straight about that, because an earlier version of this README claimed otherwise. DSH mounts shell tooling on the host plane, so `pwsh` is simply present and the preset doesn't take it away. What holds the line is the workflow instruction: no files until you confirm, no side-effecting commands, and hand those to you instead.
+
+So "it doesn't write code" is a rule it follows, not a capability it lacks. If you want the structural version, run the session read-only (`/permission read-only`) and the filesystem sandbox enforces it for real.
 
 It isn't a prompt snippet — it's a full mode. Its identity, toolset and sub-agents are fixed when the session is created, rather than depending on the model remembering to behave.
 
@@ -35,12 +37,12 @@ It isn't a prompt snippet — it's a full mode. Its identity, toolset and sub-ag
 This is not a portable prompt. It leans on DSH internals, and most of it wouldn't translate to another tool as-is.
 
 - **The mode is a real agent preset**, declared by a bundle patch (`cordis.patch.yml`). Identity, toolset and sub-agents are composed at session creation. Nothing is bolted on at runtime.
-- **The main agent's "can't write code" guarantee is structural, not textual.** Its toolset simply has no shell, no write and no edit. There's no prompt saying "please don't install dependencies".
-- **The sub-agent runtime lives in its own isolated realm** (`isolate: {subagents: true}`), plus the matching `send_message` control tools. Both are component parts this mode mounts for itself.
+- **Anything that provides a service has to live in its own isolated realm**, and its consuming tools have to stay at the top level — otherwise the tool never reaches the session's tool list. The sub-agent runtime (`isolate: {subagents: true}`) and the shell executor work this way. Get either half in the wrong place and the whole preset breaks.
+- **The sub-agent runtime also mounts its own `send_message`.** Without it the sub-agents exist but can't be talked to again.
 - **The four skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
-- **The sub-agents' permissions are set by `toolFilter`.** Both get the full toolset, shell and write/edit included, with their persona doing the work of keeping them to look-but-don't-touch.
+- **The sub-agents' permissions are set by `toolFilter`**, validated against the tools actually registered in that scope. A wrong name doesn't degrade the sub-agent, it makes it uncreatable.
 
-Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history.
+Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history, and `scripts/check-tool-filter.cjs` exists because three wrong names shipped before it did.
 
 ## Install
 
@@ -126,10 +128,9 @@ To make it the default for new sessions, set it in Settings → Modes. Though if
 One mode, containing:
 
 - A standing workflow description (core principles, permission boundaries, the discussion phases, the review step, what comes after) — around 3,300 characters, carried on every request
-- A read-only toolset: read files, find files, search contents, web search, fetch pages, ask you questions, load skills, track a to-confirm list
-- One write permission: writing that final document
-- No shell for the main agent itself
-- Two sub-agents (below)
+- The usual toolset: files, search, web, questions, skills, a to-confirm list, plus `pwsh` from the host plane. No removed capabilities.
+- One write permission in practice: writing that final document
+- Two sub-agents (below), which this preset mounts itself along with their runtime
 
 It also brings four skills, installed alongside and loaded only when needed:
 
@@ -176,7 +177,7 @@ To tell whether you've hit this: if your `send_message` takes `target` and error
 
 ## Known limitations
 
-**"No files during discussion" is now a convention, not a structural guarantee.** Both sub-agents have been given write/edit and shell, so they are capable of changing your workspace; all that keeps them to look-but-don't-touch is their persona. The main agent genuinely has no shell, and the only document that gets written at the end is still the one it produces itself.
+**"No files during discussion" is a convention, not a structural guarantee.** The preset doesn't remove any tools — `write`, `edit` and `pwsh` are all present, for the main agent and for both sub-agents. What keeps files from appearing is the workflow instruction. The only document written at the end is still the one the main agent produces.
 
 If you want a stronger guarantee than that, switch the session to read-only with `/permission read-only` — the sandbox will then block writes at the filesystem layer.
 

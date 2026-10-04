@@ -63,34 +63,65 @@ for (const pkg of new Set(mounted)) {
   for (const n of names) known.add(n);
 }
 
-// Collect every `allow: [...]` list in the file, with the line number it starts on.
+// Collect every `allow:` entry. Two shapes are in use:
+//   allow: ['a', 'b']                     a plain YAML flow sequence
+//   allow: !!js >-  [...] .concat([...])   a Loader expression (platform-conditional)
+// Both are handled by scraping the quoted string literals, which is what we
+// actually want to validate — the tool names themselves.
 const allowLists = [];
 const lines = text.split('\n');
 lines.forEach((line, i) => {
-  const m = /^\s*allow:\s*\[(.*)\]\s*$/.exec(line);
-  if (!m) return;
-  const names = m[1]
-    .split(',')
-    .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
-    .filter(Boolean);
-  allowLists.push({ line: i + 1, names });
+  if (!/^\s*allow:/.test(line)) return;
+  // Gather the `allow:` line plus any continuation lines that are part of the
+  // same block scalar / flow sequence (indented further, or a continuation).
+  let chunk = line;
+  for (let j = i + 1; j < lines.length; j++) {
+    const next = lines[j];
+    if (next.trim() === '') break;
+    // Stop when indentation drops back to the `allow:` level or shallower.
+    const indent = next.match(/^\s*/)[0].length;
+    const allowIndent = line.match(/^\s*/)[0].length;
+    if (indent <= allowIndent) break;
+    chunk += '\n' + next;
+  }
+
+  const names = [];
+  for (const m of chunk.matchAll(/['"]([A-Za-z_][A-Za-z0-9_]*)['"]/g)) {
+    names.push(m[1]);
+  }
+  // Drop JS keywords that the expression form can contain inside string literals.
+  const filtered = names.filter((n) => !['win32', 'darwin', 'linux'].includes(n));
+  const conditional = /!!js|\.concat\(/.test(chunk);
+  if (filtered.length) allowLists.push({ line: i + 1, names: [...new Set(filtered)], conditional });
 });
 
 if (allowLists.length === 0) {
-  console.error('no `allow: [...]` list found in cordis.patch.yml — did the shape change?');
+  console.error('no `allow:` entry found in cordis.patch.yml — did the shape change?');
   process.exit(1);
 }
 
+// Tools that only exist on some platforms. Naming one of these in an
+// unconditional list is the exact bug that shipped once: `bash` was listed on
+// Windows, tools.restrict() threw, and both sub-agents became uncreatable.
+const PLATFORM_ONLY = { bash: 'non-Windows', pwsh: 'Windows' };
+
 let failed = false;
-for (const { line, names } of allowLists) {
+for (const { line, names, conditional } of allowLists) {
   const unknown = names.filter((n) => !known.has(n));
+  const platformRisk = conditional
+    ? []
+    : names.filter((n) => PLATFORM_ONLY[n]);
   const label = `cordis.patch.yml:${line}`;
-  if (unknown.length === 0) {
-    console.log(`ok    ${label}  [${names.join(', ')}]`);
-  } else {
-    failed = true;
-    console.log(`FAIL  ${label}`);
-    for (const u of unknown) console.log(`        unknown tool: ${u}`);
+  if (unknown.length === 0 && platformRisk.length === 0) {
+    console.log(`ok    ${label}${conditional ? '  (platform-conditional)' : ''}  [${names.join(', ')}]`);
+    continue;
+  }
+  failed = true;
+  console.log(`FAIL  ${label}`);
+  for (const u of unknown) console.log(`        unknown tool: ${u}`);
+  for (const p of platformRisk) {
+    console.log(`        platform-specific tool "${p}" (${PLATFORM_ONLY[p]}) in an unconditional list`);
+    console.log(`        -> make the list platform-conditional, or drop it`);
   }
 }
 
@@ -102,8 +133,8 @@ if (failed) {
   console.log('');
   console.log('An allow-list names a tool this scope does not register.');
   console.log('tools.restrict() will throw and the sub-agent will not be creatable.');
-  console.log('Either remove the name, or mount whatever provides it (and add that');
-  console.log('package to TOOLS_BY_PACKAGE in this script).');
+  console.log('Either remove the name, mount whatever provides it (and add that');
+  console.log('package to TOOLS_BY_PACKAGE in this script), or gate it by platform.');
   process.exit(1);
 }
 
