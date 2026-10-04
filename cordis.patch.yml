@@ -101,20 +101,28 @@
               # 缺了会让模型对当前权限产生错误认知。
               includeRuntimeContext: true
 
-          # ── 工具面 ────────────────────────────────────────────────────────
-          # 关于 shell：本 preset 的会话里原本不存在 pwsh/bash（宿主根的对应行是
-          # disabled，标准 preset 又把它挂在自己的 realm 里），所以要给子 agent 用
-          # shell，必须在这里自己挂一份执行器 + 工具。
-          # 曾经踩过的坑：`dsh-subagent` / `dsh-subagent-spawn-in-process` 直接挂
-          # 顶层会和宿主根的 `subagents` 服务撞名。那两个服务提供方现在放在下面的
-          # subagent-realm 里。shell 这组先按顶层挂（与官方 preset 的写法一致），
-          # 如果将来报 service 重复注册，就同样搬进一个 isolate 组。
-          - id: pwsh-sandbox
-            name: '@deepseek-ai/dsh-pwsh-sandbox'
-            disabled: !!js process.platform !== 'win32'
-          - id: bash-sandbox
-            name: '@deepseek-ai/dsh-bash-sandbox'
-            disabled: !!js process.platform === 'win32'
+          # ── shell 运行时：执行器必须隔离，工具放外面 ──────────────────────
+          # 本 preset 的会话里原本没有 pwsh/bash：宿主根的对应行是 disabled，标准
+          # preset 又把它挂在自己的 realm 里，所以自用要自己挂一份。
+          # 但 `dsh-pwsh-sandbox` 是"提供 service"的行 —— 直接挂顶层会撞宿主根：
+          #   service "shell" has been registered at <SandboxPwshExecutor>
+          # 并按"整份 preset 变 broken"处理（模式选择器里就看不见它了）。
+          # 所以拆成两半，和下面 subagent-realm 同一个套路：
+          #   - 执行器（提供 service）→ 放进 isolate 组，拿私有实例
+          #   - 消费方工具（tool-pwsh / tool-bash）→ 放顶层，才能进会话工具面
+          # 把工具一起塞进 isolate 组是不行的：工具是 scope 贡献，放进去就看不见了。
+          - id: shell-realm
+            name: cordis:group
+            group: true
+            isolate:
+              shell: true
+            config:
+              - id: pwsh-sandbox
+                name: '@deepseek-ai/dsh-pwsh-sandbox'
+                disabled: !!js process.platform !== 'win32'
+              - id: bash-sandbox
+                name: '@deepseek-ai/dsh-bash-sandbox'
+                disabled: !!js process.platform === 'win32'
           - id: tool-pwsh
             name: '@deepseek-ai/dsh-tool-pwsh'
             disabled: !!js process.platform !== 'win32'
