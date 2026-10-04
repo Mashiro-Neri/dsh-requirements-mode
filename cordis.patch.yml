@@ -45,10 +45,10 @@
                 - 产出开发文档后本工作流即完成并停下，不默认进入实现；只有用户另行提出开发请求才进入实现。
 
                 ## 权限边界
-                - 用户明确确认可以整理文档之前：不创建项目、不写代码、不生成任何文件、不安装依赖、不修改配置、不执行任何影响环境的操作。你自己的工具集里没有 shell，这是刻意的。
-                - **但你的子 agent 有 shell 和 write / edit。** 那条边界约束的是"产出什么"，不是"能查什么"：调查和核实可以放手让它们去做，但**不要让它们替你产出交付物**，也不要在讨论阶段让它们改动用户的工作区。
-                - 确认之后只生成一样东西：最终开发文档。除它之外不新增任何文件。
-                - 你无法自行跑命令验证本机环境事实（运行时版本、进程、端口、日志内容），这类问题交给调查员。
+                - 用户明确确认可以整理文档之前：不创建项目、不写代码、不生成任何文件、不安装依赖、不修改配置、不执行任何影响环境的操作。**这是行为约束，不是说你的工具集里没有这些能力**——你手上就有 shell 和 write / edit，子 agent 也有。能力是给你查证用的，不是给你动手用的。
+                - 查证可以放手做：读文件、跑只读命令（看版本、进程、端口、日志、git 状态）。**产出交付物不行**：讨论阶段不落任何文件，唯一例外是用户确认后的最终开发文档。
+                - 有副作用的命令（安装、构建、起服务、重定向写文件、删除、提交）不要跑，也不要让子 agent 去跑。确实需要时，把确切命令给用户，让他自己执行。
+                - 简单的事实（读一个文件、跑一条命令就能拿到）你自己做就行，不用绕一层子 agent；需要多步骤、要翻很多文件、或者要独立视角的调查，再交给 `subagent_explore`。
 
                 ## 讨论流程
                 A. 理解需求与可行性：复述你对用户目标的理解并确认是否准确，再说明主要实现路径、可行性与限制。
@@ -58,7 +58,7 @@
                 各阶段的完整细则见技能：A/B 见 requirements-refinement，C 见 requirements-clarification-checklist，D 与提问方式见 requirements-questioning-ledger。
 
                 ## 真机调查
-                需要真实机器事实时（目录、日志、配置现状、进程与端口、运行时版本、现有代码库的实际情况），交给调查员 `subagent_explore`，不要在对话里猜。它**有 shell，可以自己跑命令核实**，也有 write / edit（备用，正常调查用不到）。
+                需要真实机器事实时（目录、日志、配置现状、进程与端口、运行时版本、现有代码库的实际情况），**先自己跑只读命令查**；一句话能问清的就别绕子 agent。要翻很多文件、要多步骤、或者需要一个独立视角的时候，交给调查员 `subagent_explore`——它同样有 shell，也可以自己跑命令核实。
 
                 调研流程：
                 1. 先写出这一轮具体的调查计划（要回答什么、看哪些文件或跑哪些命令）。不要只说"查一下"。
@@ -221,15 +221,19 @@
                     3. 推断（明确标注哪些是推断、依据是什么）
                     4. 未能确认的部分（缺什么、为什么缺；需要用户决定的，给出建议命令或问题）
                   toolFilter:
-                    # 名字仍然逐个列出，不用通配符 —— 这样 scripts/check-tool-filter.cjs
-                    # 能拦住不存在的工具名。写错的后果是子 agent 直接创建不出来，而界面上
-                    # 只表现为"这模式不好使"，真实报错只在会话日志里：
-                    #   names unknown global tools "pwsh", "bash"            （shell 没挂时）
+                    # 只写本会话真正注册过的全局工具名。名字逐个列出（不用通配符），
+                    # 这样 check-tool-filter.cjs 能拦住错字。写错的后果是子 agent
+                    # 直接创建不出来，界面上只表现为"这模式不好使"，真实报错只在日志里：
+                    #   names unknown global tools "pwsh", "bash"            （shell 还没挂上时）
+                    #   names unknown global tool "bash"                     （Windows 上没有 bash）
                     #   names unknown global tools "read_mcp_resource", ...  （MCP 资源工具不在本作用域）
-                    # 下面这份 = 本会话已知的全部工具，即"全套权限"。
-                    # 注意：给了 write / edit / pwsh 之后，调查员有能力改动工作区，
-                    # "讨论阶段不产出文件"不再有物理保证，只剩人格约定。
-                    allow: ['read', 'read_image', 'glob', 'grep', 'write', 'edit', 'pwsh', 'bash', 'skill', 'web_fetch', 'web_search', 'todo_write', 'ask_user_question', 'interrupt_agent', 'list_agents', 'send_message', 'subagent_explore', 'subagent_review', 'load_workspace_dependencies']
+                    # 注意 bash 只有非 Windows 才有，所以按平台条件加，别硬写死。
+                    # 给了 write / edit / shell 之后它们有能力改动工作区，"讨论阶段不产出文件"
+                    # 不再有物理保证，只剩人格约定。
+                    allow: !!js >-
+                      ['read', 'read_image', 'glob', 'grep', 'write', 'edit', 'pwsh']
+                        .concat(process.platform === 'win32' ? [] : ['bash'])
+                        .concat(['skill', 'web_fetch', 'web_search', 'todo_write', 'ask_user_question', 'interrupt_agent', 'list_agents', 'send_message', 'subagent_explore', 'subagent_review', 'load_workspace_dependencies'])
 
           # ── 控制类工具：send_message / interrupt_agent / list_agents ──────
           # 必须放在 preset **顶层**，不能塞进上面的 isolate 组。
@@ -301,8 +305,11 @@
 
                 你可以读文件、也可以跑命令自己核实事实；需要用户裁决的照样写进"需用户裁决"。
               toolFilter:
-                # 名字逐个列出（不用通配符），这样 check-tool-filter.cjs 能拦住不存在的名字。
-                # 复核者也给了全套权限，含 write / edit / shell —— 它有能力改动工作区，
-                # 所以它的约束同样只剩人格约定。
-                allow: ['read', 'read_image', 'glob', 'grep', 'write', 'edit', 'pwsh', 'bash', 'skill', 'web_fetch', 'web_search', 'todo_write', 'ask_user_question', 'interrupt_agent', 'list_agents', 'send_message', 'subagent_explore', 'subagent_review', 'load_workspace_dependencies']
+                # 名字逐个列出（不用通配符），这样 check-tool-filter.cjs 能拦住错字。
+                # bash 只有非 Windows 才有，按平台条件加，别硬写死。
+                # 复核者也给了全套权限（含 write / edit / shell），约束同样只剩人格约定。
+                allow: !!js >-
+                  ['read', 'read_image', 'glob', 'grep', 'write', 'edit', 'pwsh']
+                    .concat(process.platform === 'win32' ? [] : ['bash'])
+                    .concat(['skill', 'web_fetch', 'web_search', 'todo_write', 'ask_user_question', 'interrupt_agent', 'list_agents', 'send_message', 'subagent_explore', 'subagent_review', 'load_workspace_dependencies'])
 
