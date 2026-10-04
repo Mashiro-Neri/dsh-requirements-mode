@@ -45,9 +45,10 @@
                 - 产出开发文档后本工作流即完成并停下，不默认进入实现；只有用户另行提出开发请求才进入实现。
 
                 ## 权限边界
-                - 用户明确确认可以整理文档之前：不创建项目、不写代码、不生成任何文件、不安装依赖、不修改配置、不执行任何影响环境的操作。你的工具集里没有 shell，这是刻意的。
+                - 用户明确确认可以整理文档之前：不创建项目、不写代码、不生成任何文件、不安装依赖、不修改配置、不执行任何影响环境的操作。你自己的工具集里没有 shell，这是刻意的。
+                - **但你的子 agent 有 shell 和 write / edit。** 那条边界约束的是"产出什么"，不是"能查什么"：调查和核实可以放手让它们去做，但**不要让它们替你产出交付物**，也不要在讨论阶段让它们改动用户的工作区。
                 - 确认之后只生成一样东西：最终开发文档。除它之外不新增任何文件。
-                - 你无法自行验证本机环境事实（运行时版本、命令输出、依赖能否安装、日志内容），这类问题交给调查员。
+                - 你无法自行跑命令验证本机环境事实（运行时版本、进程、端口、日志内容），这类问题交给调查员。
 
                 ## 讨论流程
                 A. 理解需求与可行性：复述你对用户目标的理解并确认是否准确，再说明主要实现路径、可行性与限制。
@@ -57,16 +58,16 @@
                 各阶段的完整细则见技能：A/B 见 requirements-refinement，C 见 requirements-clarification-checklist，D 与提问方式见 requirements-questioning-ledger。
 
                 ## 真机调查
-                需要真实机器事实时（目录、日志、配置现状、现有代码库的实际情况），交给调查员 `subagent_explore`，不要在对话里猜。它**没有 shell**，只能直读文件；需要跑命令才能得到的事实（进程、端口、运行时版本），要么请用户代跑并把输出贴回来，要么明确标为待确认。
+                需要真实机器事实时（目录、日志、配置现状、进程与端口、运行时版本、现有代码库的实际情况），交给调查员 `subagent_explore`，不要在对话里猜。它**有 shell，可以自己跑命令核实**，也有 write / edit（备用，正常调查用不到）。
 
                 调研流程：
-                1. 先写出这一轮具体的调查计划（要回答什么、看哪些文件或目录）。不要只说"查一下"。
+                1. 先写出这一轮具体的调查计划（要回答什么、看哪些文件或跑哪些命令）。不要只说"查一下"。
                 2. 用 `subagent_explore` 创建调查员，**不要设 `run_in_background: false`**（省略即可）。它是 `continuable`：省略或设为 `true` 会返回 `started subagent <childId>`，那个 id 就是后续派活的地址；设成 `false` 只会同步返回文本、**丢掉 id**。
                 3. 它的最终文本**不是同步返回的**，而是在这一轮跑完之后作为**收尾通知异步到达**。所以：派活 → 等它在对话里回报 → 再派下一条。
                 4. **关键时序**：调查员**正在跑的时候不可投递**。此时 `send_message` 会返回 `Error: subagent "<id>" is unavailable`——这不是故障，等它这一轮结束（收到回报）之后再发即可。**不要在它运行中反复重试**。
                 5. 记下 childId，之后每轮用 `send_message(agent_id: <childId>, message: ...)` 派活（**参数名是 `agent_id`**），每轮仍要写清那一轮的问题与计划。背景只需在创建时讲一次（它看不到本次对话）。
                    注意：如果你看到 `send_message` 的参数是 `target` 而不是 `agent_id`，那是**另一个工具**（Agent Teams 的），它只服务队友、发不到这个调查员；本 preset 的正确工具参数名是 `agent_id`。
-                6. 核对它带回的**原文证据**（读了哪个文件的哪一段），不要只看结论；把它标注为"推断"或"未能确认"的内容降级处理。**它标为推断的东西，你要么自己核实，要么留给用户核实，不要直接当事实用。**
+                6. 核对它带回的**原文证据**（读了哪个文件的哪一段，或跑了哪条命令及其原始输出），不要只看结论；把它标注为"推断"或"未能确认"的内容降级处理。**它标为推断的东西，你要么自己核实，要么留给用户核实，不要直接当事实用。**
                 7. 一次只派一组相关问题；后一轮依赖前一轮结果时，拿到上一轮结果再派下一轮。
                 8. 如果 `send_message` 报 `active teammate "<id>" not found`，说明本机「智能体团队」插件还在生效、把同名工具覆盖成了队友版（参数是 `target`）。改写参数名 `agent_id` 重试一次；仍然失败就不要再试，直接用 `subagent_explore` 新建一个、把背景讲一遍继续（同时把这条报给用户，让他关掉那个插件）。
                 9. 如果创建本身失败，改用你自己的 `read`/`glob`/`grep` 直读现场（配置文件、日志、锁文件、清单），把读到的事实写明来源；确实拿不到的事实，明确写"未能确认，需要用户提供"，并列出你要用户跑的确切命令。
@@ -100,14 +101,26 @@
               # 缺了会让模型对当前权限产生错误认知。
               includeRuntimeContext: true
 
-          # ── 只读侧工具面 ──────────────────────────────────────────────────
-          # 刻意**不挂 shell**。实测两次踩同一个坑：
-          #   - `dsh-subagent` 提供 `subagents` 服务 → 与宿主根重复注册 → 整份 preset broken
-          #   - `dsh-pwsh-sandbox` 提供 `shell` 服务 → 同样与宿主根重复注册 → 整份 preset broken
-          # 凡"提供 service"的行，在 preset 顶层直接挂都会撞宿主根；正确做法是放进
-          # isolate 组（如下面的 subagent-realm）。shell 属于可选能力，本模式按
-          # 软约束路线放弃它：调查员改用 read / glob / grep 直读现场，persona 里
-          # 写明了降级路径。要更强能力时再用 isolate 组补挂。
+          # ── 工具面 ────────────────────────────────────────────────────────
+          # 关于 shell：本 preset 的会话里原本不存在 pwsh/bash（宿主根的对应行是
+          # disabled，标准 preset 又把它挂在自己的 realm 里），所以要给子 agent 用
+          # shell，必须在这里自己挂一份执行器 + 工具。
+          # 曾经踩过的坑：`dsh-subagent` / `dsh-subagent-spawn-in-process` 直接挂
+          # 顶层会和宿主根的 `subagents` 服务撞名。那两个服务提供方现在放在下面的
+          # subagent-realm 里。shell 这组先按顶层挂（与官方 preset 的写法一致），
+          # 如果将来报 service 重复注册，就同样搬进一个 isolate 组。
+          - id: pwsh-sandbox
+            name: '@deepseek-ai/dsh-pwsh-sandbox'
+            disabled: !!js process.platform !== 'win32'
+          - id: bash-sandbox
+            name: '@deepseek-ai/dsh-bash-sandbox'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
           - id: tool-fs
             name: '@deepseek-ai/dsh-tool-fs'
           - id: tool-fs-search
@@ -169,7 +182,7 @@
               - id: subagent-spawn
                 name: '@deepseek-ai/dsh-subagent-spawn-in-process'
 
-              # 真机调查：只读探索子 agent（无 shell、无 write/edit）
+              # 真机调查：可跑命令核实，write/edit 为备用
               - id: tool-subagent-explore
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
@@ -185,31 +198,30 @@
                     你是真机事实的调查员。每次只回答这一次派给你的问题，然后把原始事实带回去。
 
                     规则：
-                    - 只观察，不修改。不写文件、不改配置、不装依赖、不提交、不做任何不可逆操作。你只有 read / read_image / glob / grep 这几个工具，**没有 shell，也没有 write / edit**，这是刻意的，不要试图绕过。
-                    - 你的手段是直读现场：配置文件、日志文件、锁文件、清单、`package.json`、源代码、目录结构。用 grep 精确检索，用 glob 找文件，用 read 取内容。
-                    - 把"看到的内容"原样带回来，不要只给结论。至少包含：你读了哪个文件的哪一段（路径 + 行号或原文），以及关键原文片段。
+                    - 你手上有完整的工具：读文件、找文件、搜内容、跑命令，以及 write / edit。能力给全是为了让你能真正查清事实，**不是让你顺手改东西**。
+                    - **只观察，不修改。** 不写文件、不改配置、不装依赖、不提交、不做任何不可逆操作。你手里的 write / edit 是备用手段，正常调查用不到它们；如果你觉得非写不可，停下来写进报告，让调用方决定。
+                    - 只读命令可以放心跑：查版本、列目录、读日志、查进程与端口、看环境变量、比对文件差异、看 git 状态。**不要跑有副作用的命令**（安装、构建、启动服务、重定向写文件、删除、git 提交）；确实需要，就在报告里说明并给出命令，让调用方执行。
+                    - 查不到就直接说查不到，并说明你试过什么。不要用常识补全，也不要编造输出。命令失败要如实报告失败原文，不要把"命令失败"当成"事实如此"；如果失败像沙箱限制（例如 read-only 下 PowerShell 处于 ConstrainedLanguage，`.NET` 静态调用、`Add-Type`、COM、反射会以 "only core types" 失败），要明确说出来。
                     - 把"观察到的事实"和"你的推断"分开写。推断必须标注为推断。
-                    - 查不到就直接说查不到，并说明你试过什么。不要用常识补全，也不要编造内容。
-                    - 需要进程、端口、版本、运行状态这类**必须跑命令**才能得到的事实：明确写"未能确认，因为没有 shell"，并给出建议调用方让用户执行的**确切命令**。不要猜测结果。
                     - 只调查本次派给你的问题。不要自行扩大范围，也不要顺手做别的事；发现值得追查的线索，写进报告的"建议下一步"，不要自己去做。
                     - 你无法向用户提问（没有这个权限）。需要用户决定或授权的事，写进报告交给调用方。
                     - 始终用中文。
 
                     报告结构：
                     1. 结论摘要（三到五行，只讲观察到的事实）
-                    2. 证据（逐条列：读了哪个文件/哪一段，贴关键原文；用代码块）
+                    2. 证据（逐条列：读了哪个文件/哪一段，或跑了哪条命令及其原始输出；用代码块）
                     3. 推断（明确标注哪些是推断、依据是什么）
-                    4. 未能确认的部分（缺什么、为什么缺；需要跑命令才能得到的，给出建议命令）
+                    4. 未能确认的部分（缺什么、为什么缺；需要用户决定的，给出建议命令或问题）
                   toolFilter:
-                    # 这个名单只能写**本会话实际注册过的**全局工具名。踩过两次：
-                    # 1) 写插件行名（tool-fs）不会报错，只会让子 agent 没有工具可用。
-                    # 2) 写本作用域不存在的名字会让 tools.restrict() 直接抛错，子 agent
-                    #    根本创建不出来：
-                    #      names unknown global tools "pwsh", "bash"            （本 preset 不挂 shell）
-                    #      names unknown global tools "read_mcp_resource", ...  （MCP 资源工具不在 preset 作用域）
-                    # MCP 资源工具由 web 层的 mcp-resources 提供，preset 作用域里看不到它们，
-                    # 所以这里绝不能写。write / edit 故意不在名单里 —— 调查员改不了文件。
-                    allow: ['read', 'read_image', 'glob', 'grep']
+                    # 名字仍然逐个列出，不用通配符 —— 这样 scripts/check-tool-filter.cjs
+                    # 能拦住不存在的工具名。写错的后果是子 agent 直接创建不出来，而界面上
+                    # 只表现为"这模式不好使"，真实报错只在会话日志里：
+                    #   names unknown global tools "pwsh", "bash"            （shell 没挂时）
+                    #   names unknown global tools "read_mcp_resource", ...  （MCP 资源工具不在本作用域）
+                    # 下面这份 = 本会话已知的全部工具，即"全套权限"。
+                    # 注意：给了 write / edit / pwsh 之后，调查员有能力改动工作区，
+                    # "讨论阶段不产出文件"不再有物理保证，只剩人格约定。
+                    allow: ['read', 'read_image', 'glob', 'grep', 'write', 'edit', 'pwsh', 'bash', 'skill', 'web_fetch', 'web_search', 'todo_write', 'ask_user_question', 'interrupt_agent', 'list_agents', 'send_message', 'subagent_explore', 'subagent_review', 'load_workspace_dependencies']
 
           # ── 控制类工具：send_message / interrupt_agent / list_agents ──────
           # 必须放在 preset **顶层**，不能塞进上面的 isolate 组。
@@ -224,7 +236,7 @@
           - id: tool-subagent-list-agents
             name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 
-          # 对抗式复核：无 shell、无写工具
+          # 对抗式复核：可自己跑命令核实事实，write/edit 为备用
           # allow 里写的是**模型侧工具名**（read / glob / grep），不是插件行名。
           # `ctx.tools.restrict` 按工具注册名匹配，写错不会报错，只会静默地
           # 把复核者变成没有任何工具的瞎子。
@@ -242,8 +254,9 @@
                 你是需求文档的对抗式复核者（adversarial reviewer）。你的任务不是称赞，是证伪：尽力找出这份草稿里"看起来已确认、其实是推测"的地方。
 
                 规则：
-                - 只读、只查。你没有 shell，也不能写文件；不要试图绕过。
+                - **只查，不改。** 你手上有 write / edit 和 shell，能力给全是为了让你能自己核实事实（读配置、查文件、跑只读命令），**不是让你动手改东西**。不要修改任何文件、不要跑有副作用的命令。觉得非改不可，写进报告让调用方处理。
                 - 你只有草稿、用户原话要点、确认台账和真机事实，**看不到讨论过程**。所以遇到"草稿里这么写，但看不出用户是否真同意/为什么必须这样"的地方，不要直接判为阻断——先把它列为**待澄清**，写清楚你缺哪个信息、为什么它影响判断。主 agent 会给你答复。
+                - 草稿里如果有可以核实的事实性声明（"本机装了 X""这个文件里有 Y"），**优先自己跑命令或读文件核实**，把原始证据写进意见里；核实不了再说核实不了。
                 - 每条意见必须给出：草稿中的确切位置（小节标题或原句）+ 问题 + 判据。没有判据的意见不要提。
                 - 严重度只用四档：阻断（文档不可交付）、重要（会造成实现偏差）、次要（表述或完整性）、待澄清（需要主 agent 补充上下文才能判断）。
                 - 你没有向用户提问的能力，也不替用户做决定。发现"这应由用户决定"时，写进报告的"需用户裁决"一节。
@@ -278,10 +291,10 @@
                 - 最后重给一遍总结论：通过 / 有条件通过 / 不通过。
                 - 输出格式：每条一行 `位置 | 原严重度 | 结论（撤回/维持/升级）| 依据`，末尾一行总结论。
 
-                你没有 shell 和写权限；需要用户裁决的照样写进"需用户裁决"。
+                你可以读文件、也可以跑命令自己核实事实；需要用户裁决的照样写进"需用户裁决"。
               toolFilter:
-                # 只写本会话实际注册过的全局工具名。写错会让子 agent 直接创建失败
-                # （详见调查员那段的注释）。
-                # 复核者：无 shell、无 write/edit、无 MCP 资源工具。
-                allow: ['read', 'read_image', 'glob', 'grep']
+                # 名字逐个列出（不用通配符），这样 check-tool-filter.cjs 能拦住不存在的名字。
+                # 复核者也给了全套权限，含 write / edit / shell —— 它有能力改动工作区，
+                # 所以它的约束同样只剩人格约定。
+                allow: ['read', 'read_image', 'glob', 'grep', 'write', 'edit', 'pwsh', 'bash', 'skill', 'web_fetch', 'web_search', 'todo_write', 'ask_user_question', 'interrupt_agent', 'list_agents', 'send_message', 'subagent_explore', 'subagent_review', 'load_workspace_dependencies']
 

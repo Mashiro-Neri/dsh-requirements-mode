@@ -27,29 +27,41 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const KNOWN_TOOLS = [
-  'ask_user_question',
-  'edit',
-  'glob',
-  'grep',
-  'interrupt_agent',
-  'list_agents',
-  'load_workspace_dependencies',
-  'read',
-  'read_image',
-  'send_message',
-  'skill',
-  'subagent_explore',
-  'subagent_review',
-  'todo_write',
-  'web_fetch',
-  'web_search',
-  'write',
-];
+// Tools registered by whatever this preset mounts, keyed by the plugin package
+// that contributes them. Adding a tool to the preset means adding its name here.
+// From the real 0.2.0-rc.2 error text plus the packages the preset mounts.
+const TOOLS_BY_PACKAGE = {
+  '@deepseek-ai/dsh-tool-fs': ['read', 'write', 'edit', 'read_image'],
+  '@deepseek-ai/dsh-tool-fs-search': ['glob', 'grep'],
+  '@deepseek-ai/dsh-tool-web': ['web_search', 'web_fetch'],
+  '@deepseek-ai/dsh-tool-ask-user': ['ask_user_question'],
+  '@deepseek-ai/dsh-tool-skill': ['skill'],
+  '@deepseek-ai/dsh-tool-todo': ['todo_write'],
+  '@deepseek-ai/dsh-tool-pwsh': ['pwsh'],
+  '@deepseek-ai/dsh-tool-bash': ['bash'],
+  // Provided by the host plane rather than by a row this preset mounts.
+  '@deepseek-ai/dsh-tool-subagent-control': ['send_message', 'interrupt_agent', 'list_agents'],
+  '@deepseek-ai/dsh-tool-subagent': ['subagent_explore', 'subagent_review'],
+  '@deepseek-ai/dsh-tool-workspace-dependencies': ['load_workspace_dependencies'],
+};
+
+// Tool names that live in the host composition and are visible here regardless.
+const HOST_TOOLS = ['load_workspace_dependencies'];
 
 const root = path.join(__dirname, '..');
 const patchPath = path.join(root, 'cordis.patch.yml');
 const text = fs.readFileSync(patchPath, 'utf8');
+
+// Derive the known set from the packages this preset actually mounts.
+const mounted = [...text.matchAll(/name:\s*'(@deepseek-ai\/[^']+)'/g)].map((m) => m[1]);
+const known = new Set(HOST_TOOLS);
+const contributors = [];
+for (const pkg of new Set(mounted)) {
+  const names = TOOLS_BY_PACKAGE[pkg];
+  if (!names) continue;
+  contributors.push(`${pkg} -> ${names.join(', ')}`);
+  for (const n of names) known.add(n);
+}
 
 // Collect every `allow: [...]` list in the file, with the line number it starts on.
 const allowLists = [];
@@ -71,7 +83,7 @@ if (allowLists.length === 0) {
 
 let failed = false;
 for (const { line, names } of allowLists) {
-  const unknown = names.filter((n) => !KNOWN_TOOLS.includes(n));
+  const unknown = names.filter((n) => !known.has(n));
   const label = `cordis.patch.yml:${line}`;
   if (unknown.length === 0) {
     console.log(`ok    ${label}  [${names.join(', ')}]`);
@@ -82,11 +94,16 @@ for (const { line, names } of allowLists) {
   }
 }
 
+console.log('');
+console.log('known tools derived from the packages this preset mounts:');
+for (const c of contributors) console.log('  ' + c);
+
 if (failed) {
   console.log('');
   console.log('An allow-list names a tool this scope does not register.');
   console.log('tools.restrict() will throw and the sub-agent will not be creatable.');
-  console.log('Remove the name, or mount whatever provides it inside this preset.');
+  console.log('Either remove the name, or mount whatever provides it (and add that');
+  console.log('package to TOOLS_BY_PACKAGE in this script).');
   process.exit(1);
 }
 

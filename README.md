@@ -22,7 +22,8 @@ In the normal mode an agent has the full toolset and defaults to shipping someth
 
 Pick this mode instead and:
 
-- There's no shell. Installing dependencies, starting services, changing system settings — it can't do any of that, because those tools aren't in its toolset at all. It isn't being asked nicely to hold back.
+- **The main agent itself has no shell.** Installing dependencies, starting services, changing system settings — it can't do any of that, because those tools aren't in its toolset at all. It isn't being asked nicely to hold back.
+- **The sub-agents it spawns do have shell, and write/edit.** That boundary is about what gets produced, not about what can be looked up: investigation can act, producing deliverables can't.
 - It doesn't scatter files around. Across the whole conversation it produces exactly one document, at the end.
 - Its behaviour shifts from "give me code" to "clarify, summarise, wait for your confirmation, then write the document."
 - Two extra roles show up: a sub-agent that goes and investigates, and one that looks for holes.
@@ -34,10 +35,10 @@ It isn't a prompt snippet — it's a full mode. Its identity, toolset and sub-ag
 This is not a portable prompt. It leans on DSH internals, and most of it wouldn't translate to another tool as-is.
 
 - **The mode is a real agent preset**, declared by a bundle patch (`cordis.patch.yml`). Identity, toolset and sub-agents are composed at session creation. Nothing is bolted on at runtime.
-- **The "can't write code" guarantee is structural, not textual.** The shell tools are simply absent from the preset. There's no prompt saying "please don't install dependencies".
+- **The main agent's "can't write code" guarantee is structural, not textual.** Its toolset simply has no shell, no write and no edit. There's no prompt saying "please don't install dependencies".
 - **The sub-agent runtime lives in its own isolated realm** (`isolate: {subagents: true}`), plus the matching `send_message` control tools. Both are component parts this mode mounts for itself.
 - **The four skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
-- **The reviewer's toolset is narrowed by `toolFilter`**, so it can read but not write and cannot run commands.
+- **The sub-agents' permissions are set by `toolFilter`.** Both get the full toolset, shell and write/edit included, with their persona doing the work of keeping them to look-but-don't-touch.
 
 Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history.
 
@@ -127,7 +128,7 @@ One mode, containing:
 - A standing workflow description (core principles, permission boundaries, the discussion phases, the review step, what comes after) — around 3,300 characters, carried on every request
 - A read-only toolset: read files, find files, search contents, web search, fetch pages, ask you questions, load skills, track a to-confirm list
 - One write permission: writing that final document
-- No shell
+- No shell for the main agent itself
 - Two sub-agents (below)
 
 It also brings four skills, installed alongside and loaded only when needed:
@@ -139,13 +140,15 @@ It also brings four skills, installed alongside and loaded only when needed:
 
 ## The two sub-agents
 
-The first one investigates. When the main agent needs to know what a machine actually looks like, or how an existing codebase is really structured, it sends this one to find out. It can only read files and has no shell, so anything it can't reach it reports as unreachable, along with a command you could run yourself — rather than guessing.
+The first one investigates. When the main agent needs to know what a machine actually looks like, or how an existing codebase is really structured, it sends this one to find out. It **can run read-only commands itself** — versions, processes, ports, environment, git state — and it also has write/edit available as a fallback.
 
-It follows a rule I find genuinely useful: bring back the raw evidence, and keep "what I saw" separate from "what I inferred".
+It follows a rule I find genuinely useful: bring back the raw evidence — which file was read, which command was run, what the output actually was — and keep "what I saw" separate from "what I inferred".
 
-The second one looks for holes. Once a draft exists it goes to this agent, whose job is to find places that *look* confirmed but are actually assumptions.
+The second one looks for holes. Once a draft exists it goes to this agent, whose job is to find places that *look* confirmed but are actually assumptions. If the draft makes a factual claim that can be checked, it's free to go check it.
 
-A few deliberate choices here: it can't see your conversation with the main agent, so anything it's unsure about gets listed as "needs clarification" instead of being decided unilaterally; its tools are read-only, so it can read but not write or run commands; and it can't make decisions for you — when it finds something that's yours to decide, that goes in the report for the main agent to relay.
+A few deliberate choices here: it can't see your conversation with the main agent, so anything it's unsure about gets listed as "needs clarification" instead of being decided unilaterally; and it can't make decisions for you — when it finds something that's yours to decide, that goes in the report for the main agent to relay.
+
+Both sub-agents get the full toolset, shell and write/edit included, so what keeps them to look-but-don't-touch is their persona rather than their tools. For a firmer guarantee, use `/permission read-only`.
 
 If the main agent thinks a finding is wrong, it can explain why. The reviewer either withdraws it explicitly and says the reasoning holds, or says which piece of context is missing and why it can't withdraw. Two rounds at most; anything still disputed goes to you.
 
@@ -173,7 +176,9 @@ To tell whether you've hit this: if your `send_message` takes `target` and error
 
 ## Known limitations
 
-**There's no shell in this mode**, deliberately. So for things that can only be learned by running a command — which version is installed, whether a port is open — the investigator says plainly that it can't tell, and gives you a command to run instead.
+**"No files during discussion" is now a convention, not a structural guarantee.** Both sub-agents have been given write/edit and shell, so they are capable of changing your workspace; all that keeps them to look-but-don't-touch is their persona. The main agent genuinely has no shell, and the only document that gets written at the end is still the one it produces itself.
+
+If you want a stronger guarantee than that, switch the session to read-only with `/permission read-only` — the sandbox will then block writes at the filesystem layer.
 
 **Sub-agents can't see your conversation with the main agent**, so every task you hand them has to restate the background. The upside is they won't guess at context they don't have.
 
