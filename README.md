@@ -198,6 +198,8 @@ First confirm the session really is in Requirements mode (check the mode label a
 
 If a sub-agent simply can't be created, run `node scripts/check-composition.cjs`: it catches a delegation row whose `agentPreset` isn't declared, and rows still carrying removed fields. Both make the whole preset fail to load, and the only place the real error appears is the mode card.
 
+**None of the five skills show up:** `customSkillDirs` could not resolve this package. The usual cause is an install alias that differs from the declared name — for example the profile lists `@local/dsh-requirements-mode` while the package calls itself `@dsh-community/dsh-requirements-mode`. This version tries both; if your alias is a third name, add it to the `names` array in `cordis.patch.yml`. Also check `~/.dsh/skills` for stale copies of the same skills: whichever root is found first wins, so an old copy silently shadows the bundled one.
+
 ### git or SSL errors during install
 
 This repo is cloned from GitHub at install time, so your local git needs to be able to reach it. Two common cases:

@@ -197,6 +197,8 @@ plugin_manager
 
 如果子 Agent 是**根本创建不出来**，跑一下 `node scripts/check-composition.cjs`：它能查出"委派工具指向了未声明的 preset"和"还留着已删除的字段"。这两类错都会让整份 preset 加载失败，而真正的报错只在模式卡片上。
 
+**五个技能一个都看不到**：说明 `customSkillDirs` 没解析到本包。最常见的原因是安装别名和包名不一致（比如 profile 里写的是 `@local/dsh-requirements-mode`，而包里声明的是 `@dsh-community/dsh-requirements-mode`）。当前版本已按候选名兼容这两种写法；如果你的别名是第三种，把它加进 `cordis.patch.yml` 里那个 `names` 数组。另外检查 `~/.dsh/skills` 里有没有同名的旧副本——有的话它们会盖住包内的版本（同 rank 时先发现的赢），删掉旧副本更保险。
+
 ### 安装时报 git 或 SSL 错误
 
 这个仓库是安装时按需从 GitHub 拉的，所以本机 git 得能访问 GitHub。两个常见情况：
