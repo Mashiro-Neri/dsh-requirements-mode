@@ -1,6 +1,6 @@
 {
   "name": "@dsh-community/dsh-requirements-mode",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Requirements mode for DSH: a discuss-only agent preset that clarifies a feature and produces a development document without starting implementation. 需求确认模式。",
@@ -12,6 +12,9 @@
     "requirements",
     "deepseek-harness"
   ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.2"
+  },
   "exports": {
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml"

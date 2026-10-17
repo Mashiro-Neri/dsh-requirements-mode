@@ -37,34 +37,19 @@
 这不是一段能搬去别处的提示词。它吃的是 DSH 的内部机制，很多东西换个工具就不成立了。
 
 - **整个模式是一个真正的 agent preset**，由组合包的补丁（`cordis.patch.yml`）声明。身份、工具集、子 Agent 都在会话创建时组装好，不是运行时临时挂上去的。
-- **凡是"提供 service"的行都必须放进自己的隔离 realm**，而它的消费方工具必须留在顶层——否则工具根本进不了会话工具面。子 Agent 运行时（`isolate: {subagents: true}`）和 shell 执行器都是这个套路。两半只要有一半放错位置，整份 preset 就坏。
-- **子 Agent 运行时还得自己挂一份 `send_message`**，否则子 Agent 建得出来、却再也说不上话。
-- **四个技能随包分发**，通过 `skill-filesystem` 的 `customSkillDirs` 发现，路径在加载时从本包位置解析出来——所以装一个包就够了，不用另外往系统目录里放技能。
-- **子 Agent 的权限面由 `toolFilter` 控制**，会对照该作用域实际注册的工具做校验。写错名字不是"少几个工具"，而是子 Agent 直接创建不出来。
+- **两个子 Agent 各自是一个 agent preset。** 从 DSH 0.2.1 起，`dsh-tool-subagent` 不再接受 `persona` 和 `toolFilter`，子 Agent 的人格与工具面必须写成独立 preset，再用 `agentPreset` 指过去。所以这个包一共三个 preset：模式本体，加上 `requirements-explore` 和 `requirements-review`。
+- **宿主已经提供的东西不再自己挂。** shell 执行器和子 Agent 运行时都在宿主平面上；在 preset 里再挂一份会和宿主的服务撞名，整份 preset 坏掉。所以这里只挂工具，不挂执行器和运行时。
+- **五个技能随包分发**，通过 `skill-filesystem` 的 `customSkillDirs` 发现，路径在加载时从本包位置解析出来——所以装一个包就够了，不用另外往系统目录里放技能。
 
-上面每一条都对应 DSH 平台上的一个具体能力，每一条当时都费了不少功夫。走过的弯路都留在提交历史里；`scripts/check-tool-filter.cjs` 之所以存在，是因为在它之前已经有三个写错的名字溜过去过。
+上面每一条都对应 DSH 平台上的一个具体能力，每一条当时都费了不少功夫。走过的弯路都留在提交历史里；`scripts/check-composition.cjs` 之所以存在，是因为这些错误**全都只在重启后才现形**，表现为模式从选择器里悄悄消失。
 
 ## 安装
 
 需要 DSH（DeepSeek Harness）。安装时要 Full access 权限，或者允许审批。
 
-关于版本：这套东西在 **0.1.7-rc.2** 上完整跑通过。**0.2.0-rc.1** 我核对过它用到的所有接口，没有发现变化（见下面的说明），但**没有在那一版上实际运行过**——如果你在 0.2.0-rc.1 上遇到问题，开个 issue 告诉我。
+**版本：** 在 **0.2.1-rc.2** 上测试通过。**0.2.0 及更早版本装不上**——那些版本仍要求把 `persona` 写在委派工具里，而 0.2.1 恰好把这个字段删了。由于宿主平面提供 shell，会话里会有 `pwsh`（非 Windows 上是 `bash`）。
 
-<details>
-<summary>0.2.0-rc.1 都核对了什么</summary>
-
-逐项对着两版的包源码比过：
-
-- `dsh-tool-subagent-control` 的 `send_message` 参数仍是 `agent_id` + `message`（整个模式的子 Agent 通信靠它）
-- `dsh-tool-subagent` 的配置字段一致：`provider` / `toolName` / `backgroundMode` / `enableRunInBackground` / `persona` / `toolFilter` / `maxDepth` / `agentOptions`
-- `dsh-skill-filesystem` 仍有 `customSkillDirs` / `includeDefaultRoots` / `bundledSkillDir`
-- 用到的 13 个 `@deepseek-ai/dsh-*` 包在 0.2.0-rc.1 下都存在
-
-没验证的部分：preset 挂载、`isolate` 作用域、工具过滤这些**运行时行为**。这些只有真跑起来才知道。
-
-顺带一提，这些包的 peer 依赖写的是**精确版本**（比如 `@deepseek-ai/dsh-subagent: 0.2.0-rc.1`），所以 preset 里的插件行必须和运行时同版本。正常安装时 pnpm 会解析成同一版，不用你操心。
-
-</details>
+以后再升级 DSH 又把它撞坏时，报错会以 `persona is no longer supported` 或 `service "..." has been registered` 出现在模式卡片上。先跑 `node scripts/check-composition.cjs`，这两类错它都能在重启前拦住。
 
 另外：**要先关掉「智能体团队」插件**，原因写在下面「注意事项」里。
 
@@ -125,36 +110,37 @@ plugin_manager
 
 ## 装了些什么
 
-一个模式，包含：
+三个 agent preset：
 
-- 一份常驻的工作流说明（核心原则、权限边界、讨论流程、复核环节、后续衔接），大约 3300 字，每个请求都会带上
-- 平常那套工具：读文件、找文件、搜内容、联网搜索、联网取页、向你提问、加载技能、记录待确认清单，加上宿主平面提供的 `pwsh`。**没有削减任何能力。**
-- 实际上的唯一写权限：写完那份开发文档
-- 两个子 Agent（下面单独讲），它们的运行时由这个 preset 自己挂载
+- **`requirements`**：模式本体。常驻的工作流说明（核心原则、权限边界、讨论流程、复核环节、三段闸门）、平常那套工具、五个技能，以及两个委派工具。
+- **`requirements-explore`**：调查员的人格与工具面（文件、搜索、联网、shell）。
+- **`requirements-review`**：复核者的人格与工具面（同样这一套）。
 
-另外附带五个技能，安装时一起装好，用到才会加载：
+后两个是内部零件，不是拿来开聊的模式；它们会出现在模式列表里，因为 preset 就是 preset。别选它们。
+
+模式本身不挂子 Agent 运行时，也不挂 shell 执行器——宿主平面已经提供这两样，再挂一份会和它撞名。
+
+五个技能，按阶段需要才加载：
 
 - `requirements-refinement`：讨论前期怎么比较方案、怎么实地调查、改了一处怎么保持文档一致
 - `requirements-clarification-checklist`：按项目类型列出容易漏掉的问题
 - `requirements-questioning-ledger`：怎么提问、怎么记录"已经确认过什么"
 - `requirements-doc-template`：文档的固定结构和交付前的自查清单
-- `requirements-subagent-protocol`：怎么创建和派活给两个子 Agent——参数名、投递时序、以及每种报错到底是什么意思
+- `requirements-subagent-protocol`：怎么派活和续聊两个子 Agent，以及每种报错到底是什么意思
 
-这个拆分是刻意的。常驻的工作流说明只保留原则和流程骨架；凡是机械性的东西——参数名、时序规则、报错对照表——都放进技能，真正用到时才加载。这样每次请求的成本降下来，规则本身并没有少。
+这个拆分是刻意的：常驻说明只保留原则和流程骨架，凡是机械性的东西都放进技能，真正用到时才加载。
 
 ## 两个子 Agent
 
-第一个负责调查。需要知道"这台机器实际是什么情况""这个代码库现在长什么样"的时候，主 Agent 会派它去查。它**可以自己跑只读命令**（查版本、进程、端口、环境、git 状态），也有 write / edit 作为备用手段。
+每个角色就是一个 preset，工具面也因此天然分开——调查员和复核者只是插件列表不同。
 
-它有个规矩我觉得挺有用：必须把原始证据带回来——读了哪个文件、跑了哪条命令、原始输出是什么——并且把"亲眼看到的"和"自己的推断"分开写。
+**调查员**可以自己跑只读命令（查版本、进程、端口、环境、git 状态），write / edit 作为备用。它的规矩是把原始证据带回来——读了哪个文件、跑了哪条命令、原始输出是什么——并且把"亲眼看到的"和"自己的推断"分开写。
 
-第二个负责挑毛病。文档草稿写完后交给它，它的任务是找出"看着像已确认、其实是推测"的地方。草稿里如果有能核实的事实声明，它可以自己去查证。
+**复核者**读草稿，专门找"看着像已确认、其实是推测"的地方。它看不到你和主 Agent 的对话，所以拿不准的列成"待澄清"而不是瞎判；也不能替你做决定，这类事写进报告让主 Agent 转达。
 
-它有几个刻意的设定：看不到你和主 Agent 的对话，所以拿不准的会列成"待澄清"问你，而不是自己瞎判；不能替你做决定，发现"这该你定"只能写进报告让主 Agent 转达。
+两个都拿到了完整工具（含 shell 和 write / edit），所以约束它们"只查不改"的是人格设定。要更强的保证就用 `/permission read-only`。
 
-两个子 Agent 都拿到了完整工具（含 shell 和 write / edit），所以约束它们"只查不改"的是人格设定，不是工具面。要更强的保证就用 `/permission read-only`。
-
-如果主 Agent 觉得某条意见不对，可以给它解释。它要么明确撤回并说明理由成立，要么说明你缺了哪一环所以不能撤回。来回最多两轮，还有分歧就交给你判断。
+调用只返回 `started subagent <childId>`，不等待；结果稍后作为完成通知到达，`send_message(agent_id: …)` 可以继续同一个子 Agent。主 Agent 觉得某条意见不对就解释理由，复核者要么明确撤回，要么说明缺哪一环。同一条最多来回两轮。
 
 ## 后续衔接
 
@@ -209,7 +195,7 @@ plugin_manager
 
 先确认当前会话确实是「需求确认」模式（看会话上方的模式标识）。然后看它手上的 `send_message` 参数是 `agent_id` 还是 `target`，后者说明被覆盖了。
 
-如果子 Agent 是**根本创建不出来**，第一个要怀疑的就是那个工具白名单，而真正的报错只在会话日志里。升级 DSH 之后这是最容易出问题的地方：已注册的工具集合会变，以前合法的名字可能就抛错了。跑一下 `node scripts/check-tool-filter.cjs` 能在用之前就发现。
+如果子 Agent 是**根本创建不出来**，跑一下 `node scripts/check-composition.cjs`：它能查出"委派工具指向了未声明的 preset"和"还留着已删除的字段"。这两类错都会让整份 preset 加载失败，而真正的报错只在模式卡片上。
 
 ### 安装时报 git 或 SSL 错误
 
@@ -235,23 +221,24 @@ plugin_manager
   target: @dsh-community/dsh-requirements-mode
 ```
 
-四个技能会跟着一起移除，不用另外清理。
+五个技能和两个子级 preset 会跟着一起移除，不用另外清理。
 
 ## 目录结构
 
 ```
 .
-├── package.json            声明这是个 DSH 组合包
-├── cordis.patch.yml        插件的实际内容，就一条声明
-├── skills/                 四个技能
+├── package.json              声明这是个 DSH 组合包
+├── cordis.patch.yml          插件的实际内容，三条 preset 声明
+├── skills/                   五个技能
 ├── scripts/
-│   └── build-package.ps1   打成 dist/*.tgz
+│   ├── build-package.ps1     打成 dist/*.tgz
+│   └── check-composition.cjs 重启前的结构检查
 ├── assets/
-│   ├── icon.svg            图标，原创，随本仓库 MIT 授权
+│   ├── icon.svg              图标，原创，随本仓库 MIT 授权
 │   └── icon-512.png
 ├── LICENSE
-├── README.md               英文
-└── README.zh.md            中文（本文件）
+├── README.md                 英文
+└── README.zh.md              中文（本文件）
 ```
 
 ## 自己改和打包
@@ -265,12 +252,12 @@ powershell -ExecutionPolicy Bypass -File scripts/build-package.ps1
 改过 preset 之后还建议跑一个检查：
 
 ```bash
-node scripts/check-tool-filter.cjs
+node scripts/check-composition.cjs
 ```
 
-它检查子 Agent 的 `toolFilter.allow` 里每个名字，是不是这个 preset 真能看到的工具。写错一个，`tools.restrict()` 就会抛错，子 Agent 根本创建不出来，而你看到的只是"这个模式不好使"——真正的报错只落在会话日志里。已经有三批名字踩过这个坑了，所以它现在是个脚本，不再是注释里的一句提醒。
+它检查三件事：委派工具指向的 `agentPreset` 是否在同一份文件里声明、有没有还留着已删除的字段（`persona` / `toolFilter` / `backgroundMode` / `enableRunInBackground`）、子级 preset 有没有挂委派工具（挂上就能无限递归）。这三类错各自都上线过一次，每次都要重启加一轮猜谜，因为坏掉的 preset 会直接从模式选择器里消失。
 
-两个脚本都特意只用 ASCII 字符：Windows PowerShell 5.1 读取没有 BOM 的文件时会按系统代码页解码，写中文会直接报语法错误。
+打包脚本特意只用 ASCII 字符：Windows PowerShell 5.1 读取没有 BOM 的文件时会按系统代码页解码，写中文会直接报语法错误。
 
 改完之后，预设和技能的目录结构变化需要重启 DSH 才生效；技能正文是改完就热加载的。验证方法是新建一个会话，看模式标识和工具列表对不对。
 

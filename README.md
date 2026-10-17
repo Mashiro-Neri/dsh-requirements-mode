@@ -37,34 +37,19 @@ It isn't a prompt snippet — it's a full mode. Its identity, toolset and sub-ag
 This is not a portable prompt. It leans on DSH internals, and most of it wouldn't translate to another tool as-is.
 
 - **The mode is a real agent preset**, declared by a bundle patch (`cordis.patch.yml`). Identity, toolset and sub-agents are composed at session creation. Nothing is bolted on at runtime.
-- **Anything that provides a service has to live in its own isolated realm**, and its consuming tools have to stay at the top level — otherwise the tool never reaches the session's tool list. The sub-agent runtime (`isolate: {subagents: true}`) and the shell executor work this way. Get either half in the wrong place and the whole preset breaks.
-- **The sub-agent runtime also mounts its own `send_message`.** Without it the sub-agents exist but can't be talked to again.
-- **The four skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
-- **The sub-agents' permissions are set by `toolFilter`**, validated against the tools actually registered in that scope. A wrong name doesn't degrade the sub-agent, it makes it uncreatable.
+- **Each sub-agent role is its own agent preset.** Since DSH 0.2.1, `dsh-tool-subagent` rejects `persona` and `toolFilter` config; a child's persona and toolset must be a declared preset, referenced with `agentPreset`. So the bundle ships three presets: the mode itself, plus `requirements-explore` and `requirements-review`.
+- **What the host already provides is not remounted.** The shell executor and the sub-agent runtime live on the host plane; mounting them again collides with the host's services and breaks the whole preset, so the bundle only mounts the tools.
+- **The five skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
 
-Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history, and `scripts/check-tool-filter.cjs` exists because three wrong names shipped before it did.
+Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history, and `scripts/check-composition.cjs` exists because every one of those failures only surfaced after a restart, as a mode that silently vanished from the picker.
 
 ## Install
 
 You need DSH (DeepSeek Harness), and Full access or approval enabled for the install.
 
-On versions: this was tested end to end on **0.1.7-rc.2**. I checked every interface it uses against **0.2.0-rc.1** and found no changes (details below), but I haven't actually run it on that version — if you hit problems there, please open an issue.
+**Version:** tested on **0.2.1-rc.2**. It will not load on 0.2.0 or older — those versions still expect `persona` inside the delegation tool, which is exactly what 0.2.1 removed. Thanks to the host plane, `pwsh` (or `bash` off Windows) will be available to the session.
 
-<details>
-<summary>What was checked for 0.2.0-rc.1</summary>
-
-Compared against both versions' package sources:
-
-- `dsh-tool-subagent-control`'s `send_message` still takes `agent_id` + `message` (the sub-agent messaging this whole mode depends on)
-- `dsh-tool-subagent` config fields are unchanged: `provider` / `toolName` / `backgroundMode` / `enableRunInBackground` / `persona` / `toolFilter` / `maxDepth` / `agentOptions`
-- `dsh-skill-filesystem` still has `customSkillDirs` / `includeDefaultRoots` / `bundledSkillDir`
-- All 13 `@deepseek-ai/dsh-*` packages it uses exist at 0.2.0-rc.1
-
-Not verified: the runtime behaviour — preset mounting, `isolate` scoping, tool filtering. Those only show up when you actually run it.
-
-One thing worth knowing: these packages pin their peers to **exact versions** (e.g. `@deepseek-ai/dsh-subagent: 0.2.0-rc.1`), so the plugin rows in a preset have to match the runtime version. A normal install resolves this for you.
-
-</details>
+If a DSH upgrade breaks it again, the failure shows up as `persona is no longer supported` or a `service "..." has been registered` message on the mode card. Run `node scripts/check-composition.cjs` first — it catches both classes before a restart.
 
 One more thing: **turn off the "Agent Teams" plugin first** — the reason is under [Notes](#notes).
 
@@ -125,36 +110,37 @@ To make it the default for new sessions, set it in Settings → Modes. Though if
 
 ## What's in it
 
-One mode, containing:
+Three agent presets:
 
-- A standing workflow description (core principles, permission boundaries, the discussion phases, the review step, what comes after) — around 3,300 characters, carried on every request
-- The usual toolset: files, search, web, questions, skills, a to-confirm list, plus `pwsh` from the host plane. No removed capabilities.
-- One write permission in practice: writing that final document
-- Two sub-agents (below), which this preset mounts itself along with their runtime
+- **`requirements`** — the mode itself: the standing workflow description (core principles, permission boundaries, the discussion phases, the review step, the three gates), the usual toolset, the five skills, and the two delegation tools.
+- **`requirements-explore`** — the investigator's persona and tools (files, search, web, shell).
+- **`requirements-review`** — the reviewer's persona and tools (same set).
 
-It also brings five skills, installed alongside and loaded only when needed:
+The last two are internal plumbing, not modes to start a chat in; they appear in the mode list because a preset is a preset. Leave them alone.
+
+The mode mounts no sub-agent runtime and no shell executor of its own — the host plane already provides both, and a second copy collides with it.
+
+The five skills, loaded only when a stage needs them:
 
 - `requirements-refinement` — how to compare approaches early on, how to investigate on the ground, how to keep the document consistent when something changes
 - `requirements-clarification-checklist` — questions that are easy to miss, by project type
 - `requirements-questioning-ledger` — how to ask, and how to record what's actually been confirmed
 - `requirements-doc-template` — the fixed document structure and a pre-delivery checklist
-- `requirements-subagent-protocol` — how to create and talk to the two sub-agents: which argument, the delivery timing, and what each error actually means
+- `requirements-subagent-protocol` — how to delegate and follow up with the two sub-agents, and what each error means
 
-The split is deliberate. The standing workflow description only carries principles and the shape of the process; anything that is mechanical — an argument name, a timing rule, an error table — lives in a skill and is loaded when it is actually needed. That keeps the per-request cost down without dropping the rules.
+The split is deliberate: the standing description carries principles and the shape of the process, while anything mechanical — an argument name, a timing rule, an error table — lives in a skill and is loaded when needed.
 
 ## The two sub-agents
 
-The first one investigates. When the main agent needs to know what a machine actually looks like, or how an existing codebase is really structured, it sends this one to find out. It **can run read-only commands itself** — versions, processes, ports, environment, git state — and it also has write/edit available as a fallback.
+Each role is its own preset, which is also how their toolset is scoped: the investigator and the reviewer simply have different plugin lists.
 
-It follows a rule I find genuinely useful: bring back the raw evidence — which file was read, which command was run, what the output actually was — and keep "what I saw" separate from "what I inferred".
+**Investigator.** It can run read-only commands — versions, processes, ports, environment, git state — and has write/edit as a fallback. Its rule is to bring back raw evidence (which file, which command, what the output actually said) and keep "what I saw" apart from "what I inferred".
 
-The second one looks for holes. Once a draft exists it goes to this agent, whose job is to find places that *look* confirmed but are actually assumptions. If the draft makes a factual claim that can be checked, it's free to go check it.
+**Reviewer.** It reads the draft looking for places that *look* confirmed but are assumptions. It can't see your conversation, so anything it is unsure about is listed as "needs clarification" rather than decided; and it can't make decisions for you — those go into the report for the main agent to relay.
 
-A few deliberate choices here: it can't see your conversation with the main agent, so anything it's unsure about gets listed as "needs clarification" instead of being decided unilaterally; and it can't make decisions for you — when it finds something that's yours to decide, that goes in the report for the main agent to relay.
+Both have the full toolset including write/edit and shell, so what keeps them to look-but-don't-touch is their persona. For a firmer guarantee, use `/permission read-only`.
 
-Both sub-agents get the full toolset, shell and write/edit included, so what keeps them to look-but-don't-touch is their persona rather than their tools. For a firmer guarantee, use `/permission read-only`.
-
-If the main agent thinks a finding is wrong, it can explain why. The reviewer either withdraws it explicitly and says the reasoning holds, or says which piece of context is missing and why it can't withdraw. Two rounds at most; anything still disputed goes to you.
+A call returns `started subagent <childId>` immediately; the answer arrives later as a completion notice, and `send_message(agent_id: …)` continues the same child. If the main agent thinks a finding is wrong, it explains why; the reviewer either withdraws it explicitly, or says which piece of context is missing. Two rounds per finding at most.
 
 ## What comes after
 
@@ -201,7 +187,8 @@ Go to Settings → Modes and look at the card. If it's red and marked as failed 
 Some common causes:
 
 - `service "subagents" has been registered at <SubagentRuntime>` — a row that provides a service is mounted in the wrong place and collides with one that already exists
-- `tools.restrict() names unknown global tools "..."` — a sub-agent's tool allowlist names a tool that doesn't exist in that scope
+- `tool-subagent: persona is no longer supported` — the config still carries fields a newer DSH removed; move them into a child preset
+- `service "..." has been registered at ...` — a row in the preset duplicates something the host already provides
 - `skill "xxx" is unknown or no longer available` — the skill loader isn't mounted
 - `active teammate "<id>" not found` — you're calling Agent Teams' `send_message`; turn that plugin off
 
@@ -209,7 +196,7 @@ Some common causes:
 
 First confirm the session really is in Requirements mode (check the mode label at the top). Then check whether its `send_message` takes `agent_id` or `target` — the latter means it's been overridden.
 
-If a sub-agent simply can't be created, the allow-list is the first thing to suspect, and the real error is only in the session log. After a DSH upgrade this is the most likely breakage: the set of registered tools can change, and a name that used to be valid then throws. `node scripts/check-tool-filter.cjs` catches it before you run anything.
+If a sub-agent simply can't be created, run `node scripts/check-composition.cjs`: it catches a delegation row whose `agentPreset` isn't declared, and rows still carrying removed fields. Both make the whole preset fail to load, and the only place the real error appears is the mode card.
 
 ### git or SSL errors during install
 
@@ -235,19 +222,20 @@ plugin_manager
   target: @dsh-community/dsh-requirements-mode
 ```
 
-The four skills go with it; nothing to clean up separately.
+The five skills and the two child presets go with it; nothing to clean up separately.
 
 ## Layout
 
 ```
 .
-├── package.json            declares this as a DSH bundle
-├── cordis.patch.yml        the actual plugin: a single declaration
-├── skills/                 the four skills
+├── package.json               declares this as a DSH bundle
+├── cordis.patch.yml           the actual plugin: three preset declarations
+├── skills/                    the five skills
 ├── scripts/
-│   └── build-package.ps1   packs dist/*.tgz
+│   ├── build-package.ps1      packs dist/*.tgz
+│   └── check-composition.cjs  pre-restart structural checks
 ├── assets/
-│   ├── icon.svg            original icon, MIT with this repo
+│   ├── icon.svg               original icon, MIT with this repo
 │   └── icon-512.png
 ├── LICENSE
 └── README.md
@@ -264,12 +252,12 @@ Produces a tgz and its SHA256 under `dist/`.
 There's also a check worth running after touching the preset:
 
 ```bash
-node scripts/check-tool-filter.cjs
+node scripts/check-composition.cjs
 ```
 
-It verifies that every name in a sub-agent's `toolFilter.allow` is actually a tool this preset can see. Get one wrong and `tools.restrict()` throws, the sub-agent can't be created at all, and all you see is that the mode "doesn't work" — the real error only lands in the session log. Three different names have caused this already, which is why it's a script now rather than a note in the comments.
+It verifies that every `agentPreset` a delegation row points at is declared in the same file, that no removed fields (`persona`, `toolFilter`, `backgroundMode`, `enableRunInBackground`) are still configured, and that child presets don't mount delegation tools. Each of those has shipped once and each cost a restart plus a round of guessing, because a broken preset simply disappears from the mode picker.
 
-Both scripts are deliberately ASCII-only: Windows PowerShell 5.1 decodes BOM-less files using the system codepage, and non-ASCII characters break it outright.
+The packaging script is deliberately ASCII-only: Windows PowerShell 5.1 decodes BOM-less files using the system codepage, and non-ASCII characters break it outright.
 
 After changing things, structural changes to the preset or skills need a DSH restart; skill bodies are hot-reloaded. To verify, start a new session and check the mode label and tool list.
 
