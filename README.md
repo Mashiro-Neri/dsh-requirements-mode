@@ -39,7 +39,7 @@ This is not a portable prompt. It leans on DSH internals, and most of it wouldn'
 - **The mode is a real agent preset**, declared by a bundle patch (`cordis.patch.yml`). Identity, toolset and sub-agents are composed at session creation. Nothing is bolted on at runtime.
 - **Each sub-agent role is its own agent preset.** Since DSH 0.2.1, `dsh-tool-subagent` rejects `persona` and `toolFilter` config; a child's persona and toolset must be a declared preset, referenced with `agentPreset`. So the bundle ships three presets: the mode itself, plus `requirements-explore` and `requirements-review`.
 - **What the host already provides is not remounted.** The shell executor and the sub-agent runtime live on the host plane; mounting them again collides with the host's services and breaks the whole preset, so the bundle only mounts the tools.
-- **The five skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
+- **The seven skills ship inside the bundle.** They're discovered through `skill-filesystem`'s `customSkillDirs`, with the path resolved from the bundle's own location at load time — so installing one package is enough.
 
 Each of these maps to something the platform gives you, and each of them took some digging to get right. The dead ends are written up in the commit history, and `scripts/check-composition.cjs` exists because every one of those failures only surfaced after a restart, as a mode that silently vanished from the picker.
 
@@ -112,20 +112,22 @@ To make it the default for new sessions, set it in Settings → Modes. Though if
 
 Three agent presets:
 
-- **`requirements`** — the mode itself: the standing workflow description (core principles, permission boundaries, the discussion phases, the review step, the three gates), the usual toolset, the five skills, and the two delegation tools.
+- **`requirements`** — the mode itself: the standing workflow description (core principles, permission boundaries, the discussion phases, the review step, the three gates), the usual toolset, the skills, and the two delegation tools.
 - **`requirements-explore`** — the investigator's persona and tools (files, search, web, shell).
-- **`requirements-review`** — the reviewer's persona and tools (same set).
+- **`requirements-review`** — the reviewer's persona and tools (the same set, plus skills — it loads its own checklist).
 
 The last two are internal plumbing, not modes to start a chat in; they appear in the mode list because a preset is a preset. Leave them alone.
 
 The mode mounts no sub-agent runtime and no shell executor of its own — the host plane already provides both, and a second copy collides with it.
 
-The five skills, loaded only when a stage needs them:
+The seven skills, loaded only when a stage needs them:
 
 - `requirements-refinement` — how to compare approaches early on, how to investigate on the ground, how to keep the document consistent when something changes
 - `requirements-clarification-checklist` — questions that are easy to miss, by project type
 - `requirements-questioning-ledger` — how to ask, and how to record what's actually been confirmed
-- `requirements-doc-template` — the fixed document structure and a pre-delivery checklist
+- `requirements-doc-template` — the fixed document structure
+- `requirements-delivery-checklist` — the pre-delivery self-check, where the file goes, and the three gates
+- `requirements-review-rubric` — the reviewer's ten-point checklist
 - `requirements-subagent-protocol` — how to delegate and follow up with the two sub-agents, and what each error means
 
 The split is deliberate: the standing description carries principles and the shape of the process, while anything mechanical — an argument name, a timing rule, an error table — lives in a skill and is loaded when needed.
@@ -198,7 +200,7 @@ First confirm the session really is in Requirements mode (check the mode label a
 
 If a sub-agent simply can't be created, run `node scripts/check-composition.cjs`: it catches a delegation row whose `agentPreset` isn't declared, and rows still carrying removed fields. Both make the whole preset fail to load, and the only place the real error appears is the mode card.
 
-**None of the five skills show up:** `customSkillDirs` could not resolve this package. The usual cause is an install alias that differs from the declared name — for example the profile lists `@local/dsh-requirements-mode` while the package calls itself `@dsh-community/dsh-requirements-mode`. This version tries both; if your alias is a third name, add it to the `names` array in `cordis.patch.yml`. Also check `~/.dsh/skills` for stale copies of the same skills: whichever root is found first wins, so an old copy silently shadows the bundled one.
+**None of the seven skills show up:** `customSkillDirs` could not resolve this package. The usual cause is an install alias that differs from the declared name — for example the profile lists `@local/dsh-requirements-mode` while the package calls itself `@dsh-community/dsh-requirements-mode`. This version tries both; if your alias is a third name, add it to the `names` array in `cordis.patch.yml`. Also check `~/.dsh/skills` for stale copies of the same skills: whichever root is found first wins, so an old copy silently shadows the bundled one.
 
 ### git or SSL errors during install
 
@@ -224,7 +226,7 @@ plugin_manager
   target: @dsh-community/dsh-requirements-mode
 ```
 
-The five skills and the two child presets go with it; nothing to clean up separately.
+The seven skills and the two child presets go with it; nothing to clean up separately.
 
 ## Layout
 
@@ -232,7 +234,7 @@ The five skills and the two child presets go with it; nothing to clean up separa
 .
 ├── package.json               declares this as a DSH bundle
 ├── cordis.patch.yml           the actual plugin: three preset declarations
-├── skills/                    the five skills
+├── skills/                    the seven skills
 ├── scripts/
 │   ├── build-package.ps1      packs dist/*.tgz
 │   └── check-composition.cjs  pre-restart structural checks

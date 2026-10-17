@@ -24,9 +24,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const patchPath = path.join(__dirname, '..', 'cordis.patch.yml');
-const lines = fs.readFileSync(patchPath, 'utf8').split('\n');
+const text = fs.readFileSync(patchPath, 'utf8');
+const lines = text.split('\n');
 
 const findings = [];
+const warnings = [];
 const note = (line, msg) => findings.push(`cordis.patch.yml:${line}  ${msg}`);
 
 /** Collect rows: `- id: <rowId>` plus the lines that belong to that row. */
@@ -115,11 +117,59 @@ for (const [id, info] of declared) {
   }
 }
 
+// 5) skills: every directory must carry a matching name, stay under the trim
+// threshold, and every requirements-* skill named in the patch must exist.
+const SKILL_SIZE_CAP = 8192;
+const skillsDir = path.join(__dirname, '..', 'skills');
+const skillNames = new Set();
+for (const dirent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+  if (!dirent.isDirectory()) continue;
+  const file = path.join(skillsDir, dirent.name, 'SKILL.md');
+  if (!fs.existsSync(file)) {
+    note(0, `skills/${dirent.name} has no SKILL.md`);
+    continue;
+  }
+  const body = fs.readFileSync(file, 'utf8');
+  const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(body);
+  const declaredName = front && /^name:\s*(\S+)\s*$/m.exec(front[1]);
+  if (!declaredName) {
+    note(0, `skills/${dirent.name}/SKILL.md has no name in frontmatter`);
+  } else if (declaredName[1] !== dirent.name) {
+    note(0, `skills/${dirent.name}/SKILL.md declares name "${declaredName[1]}"`);
+  } else {
+    skillNames.add(declaredName[1]);
+  }
+  const bytes = Buffer.byteLength(body, 'utf8');
+  if (bytes > SKILL_SIZE_CAP) {
+    note(0, `skills/${dirent.name}/SKILL.md is ${bytes} bytes (cap ${SKILL_SIZE_CAP}) — split it`);
+  } else if (bytes > SKILL_SIZE_CAP * 0.85) {
+    warnings.push(`skills/${dirent.name}/SKILL.md is at ${Math.round((bytes / SKILL_SIZE_CAP) * 100)}% of the cap — plan a split`);
+  }
+}
+
+// Skill names referenced from persona text / the patch must actually exist.
+// `requirements-mode`, `dsh-requirements-mode` and the bare `requirements`
+// preset id are not skill names.
+const NOT_SKILLS = new Set([
+  'requirements-mode', 'requirements',
+  'requirements-explore', 'requirements-review',
+]);
+for (const token of new Set(text.match(/\brequirements-[a-z0-9-]+\b/g) || [])) {
+  if (NOT_SKILLS.has(token)) continue;
+  if (!skillNames.has(token)) {
+    warnings.push(`patch mentions "${token}", which is not a skill in skills/ (typo?)`);
+  }
+}
+
 const allToolRows = rows.filter((r) => r.rowId.startsWith('tool-subagent')).map((r) => r.rowId);
 
 console.log(`declared presets: ${[...declared.keys()].join(', ') || '(none)'}`);
 console.log(`delegation rows:  ${allToolRows.join(', ') || '(none)'}`);
+console.log(`skills:           ${[...skillNames].join(', ') || '(none)'}`);
 console.log('');
+
+for (const w of warnings) console.log('WARN  ' + w);
+if (warnings.length) console.log('');
 
 if (findings.length) {
   for (const f of findings) console.log('FAIL  ' + f);

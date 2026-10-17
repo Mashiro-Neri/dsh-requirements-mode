@@ -39,7 +39,7 @@
 - **整个模式是一个真正的 agent preset**，由组合包的补丁（`cordis.patch.yml`）声明。身份、工具集、子 Agent 都在会话创建时组装好，不是运行时临时挂上去的。
 - **两个子 Agent 各自是一个 agent preset。** 从 DSH 0.2.1 起，`dsh-tool-subagent` 不再接受 `persona` 和 `toolFilter`，子 Agent 的人格与工具面必须写成独立 preset，再用 `agentPreset` 指过去。所以这个包一共三个 preset：模式本体，加上 `requirements-explore` 和 `requirements-review`。
 - **宿主已经提供的东西不再自己挂。** shell 执行器和子 Agent 运行时都在宿主平面上；在 preset 里再挂一份会和宿主的服务撞名，整份 preset 坏掉。所以这里只挂工具，不挂执行器和运行时。
-- **五个技能随包分发**，通过 `skill-filesystem` 的 `customSkillDirs` 发现，路径在加载时从本包位置解析出来——所以装一个包就够了，不用另外往系统目录里放技能。
+- **七个技能随包分发**，通过 `skill-filesystem` 的 `customSkillDirs` 发现，路径在加载时从本包位置解析出来——所以装一个包就够了，不用另外往系统目录里放技能。
 
 上面每一条都对应 DSH 平台上的一个具体能力，每一条当时都费了不少功夫。走过的弯路都留在提交历史里；`scripts/check-composition.cjs` 之所以存在，是因为这些错误**全都只在重启后才现形**，表现为模式从选择器里悄悄消失。
 
@@ -112,7 +112,7 @@ plugin_manager
 
 三个 agent preset：
 
-- **`requirements`**：模式本体。常驻的工作流说明（核心原则、权限边界、讨论流程、复核环节、三段闸门）、平常那套工具、五个技能，以及两个委派工具。
+- **`requirements`**：模式本体。常驻的工作流说明（核心原则、权限边界、讨论流程、复核环节、三段闸门）、平常那套工具、七个技能，以及两个委派工具。
 - **`requirements-explore`**：调查员的人格与工具面（文件、搜索、联网、shell）。
 - **`requirements-review`**：复核者的人格与工具面（同样这一套）。
 
@@ -120,15 +120,17 @@ plugin_manager
 
 模式本身不挂子 Agent 运行时，也不挂 shell 执行器——宿主平面已经提供这两样，再挂一份会和它撞名。
 
-五个技能，按阶段需要才加载：
+七个技能，按阶段需要才加载：
 
 - `requirements-refinement`：讨论前期怎么比较方案、怎么实地调查、改了一处怎么保持文档一致
 - `requirements-clarification-checklist`：按项目类型列出容易漏掉的问题
 - `requirements-questioning-ledger`：怎么提问、怎么记录"已经确认过什么"
-- `requirements-doc-template`：文档的固定结构和交付前的自查清单
+- `requirements-doc-template`：开发文档的八节骨架与开头固定段落
+- `requirements-delivery-checklist`：交付前的自检清单、落盘位置与三段闸门
+- `requirements-review-rubric`：复核者的十项检查清单
 - `requirements-subagent-protocol`：怎么派活和续聊两个子 Agent，以及每种报错到底是什么意思
 
-这个拆分是刻意的：常驻说明只保留原则和流程骨架，凡是机械性的东西都放进技能，真正用到时才加载。
+这个拆分是刻意的：常驻说明只保留原则和流程骨架，凡是机械性的东西都放进技能，真正用到时才加载。复核者的人格也不例外——它现在只留"证伪、给判据、四档严重度"，十项清单在 `requirements-review-rubric` 里按需加载。
 
 ## 两个子 Agent
 
@@ -197,7 +199,7 @@ plugin_manager
 
 如果子 Agent 是**根本创建不出来**，跑一下 `node scripts/check-composition.cjs`：它能查出"委派工具指向了未声明的 preset"和"还留着已删除的字段"。这两类错都会让整份 preset 加载失败，而真正的报错只在模式卡片上。
 
-**五个技能一个都看不到**：说明 `customSkillDirs` 没解析到本包。最常见的原因是安装别名和包名不一致（比如 profile 里写的是 `@local/dsh-requirements-mode`，而包里声明的是 `@dsh-community/dsh-requirements-mode`）。当前版本已按候选名兼容这两种写法；如果你的别名是第三种，把它加进 `cordis.patch.yml` 里那个 `names` 数组。另外检查 `~/.dsh/skills` 里有没有同名的旧副本——有的话它们会盖住包内的版本（同 rank 时先发现的赢），删掉旧副本更保险。
+**七个技能一个都看不到**：说明 `customSkillDirs` 没解析到本包。最常见的原因是安装别名和包名不一致（比如 profile 里写的是 `@local/dsh-requirements-mode`，而包里声明的是 `@dsh-community/dsh-requirements-mode`）。当前版本已按候选名兼容这两种写法；如果你的别名是第三种，把它加进 `cordis.patch.yml` 里那个 `names` 数组。另外检查 `~/.dsh/skills` 里有没有同名的旧副本——有的话它们会盖住包内的版本（同 rank 时先发现的赢），删掉旧副本更保险。
 
 ### 安装时报 git 或 SSL 错误
 
@@ -223,7 +225,7 @@ plugin_manager
   target: @dsh-community/dsh-requirements-mode
 ```
 
-五个技能和两个子级 preset 会跟着一起移除，不用另外清理。
+七个技能和两个子级 preset 会跟着一起移除，不用另外清理。
 
 ## 目录结构
 
@@ -231,7 +233,7 @@ plugin_manager
 .
 ├── package.json              声明这是个 DSH 组合包
 ├── cordis.patch.yml          插件的实际内容，三条 preset 声明
-├── skills/                   五个技能
+├── skills/                   七个技能
 ├── scripts/
 │   ├── build-package.ps1     打成 dist/*.tgz
 │   └── check-composition.cjs 重启前的结构检查

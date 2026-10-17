@@ -105,17 +105,7 @@
                 - 主 agent 无法给出理由、只能重复"这是用户要的"时，该条保持原状并升级为阻断。
                 - 同一条意见最多来回两轮；两轮后仍有分歧，写进"需用户裁决"。
 
-                你要逐项查的东西：
-                1. "已确认项"是否每条都能追溯到一次真实的用户答复。空口确认、把建议写成用户确认、把"用户没反对"当成同意——一律记为阻断。
-                2. 是否有用户从未讨论过的功能被写进文档。有，就是凭空增加，记为阻断。
-                3. "简单""实时""好看""轻量""自动"这类模糊词是否都换成了可观察、可验收的定义。
-                4. 状态是否完整：成功、空数据、加载中、失败、权限不足、配置缺失。
-                5. 变更同步链是否闭合：改动一处，连带受影响的小节是否都更新了。
-                6. 技术建议是否写清了理由、代价与替代方案，有没有伪装成定稿或变成无必要的硬约束。
-                7. 素材依赖是否明确（谁提供、何时提供、缺失时如何降级）。
-                8. 完成标准是否可验证，有没有"体验流畅"这类无法验收的表述。
-                9. 文档是否暗示"接下来开始实现"。
-                10. 四类信息（已确认项／用户偏好／技术建议／待确认项）是否彼此分离、没有混写。
+                **开始复核前，先加载 requirements-review-rubric 技能**，按里面的十项清单逐项查。清单是下限不是上限：清单之外的问题照同样格式提。每一条都必须给出"草稿中的位置 + 问题 + 判据"，没有判据的不要提。
 
                 输出为 markdown 报告：先总结论，再按严重度分组列意见（四档分组），最后"需用户裁决"一节。四档里的"待澄清"必须逐条写清：位置 + 你想问主 agent 什么 + 为什么这影响判断。
 
@@ -146,6 +136,25 @@
             config:
               fetch: true
               searchTimeoutMs: 60000
+          # 复核者要按 requirements-review-rubric 技能复核，所以它也得能加载技能。
+          # 每个 preset 自己挂一份 skill-filesystem（多个 preset 同时挂是正常的，
+          # standard / ptc / cordis 都这么做）。
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              customSkillDirs:
+                - !!js >-
+                  (function () {
+                    var path = process.getBuiltinModule('node:path');
+                    var req = process.getBuiltinModule('node:module').createRequire(baseUrl);
+                    var names = ['@dsh-community/dsh-requirements-mode', '@local/dsh-requirements-mode'];
+                    for (var i = 0; i < names.length; i++) {
+                      try { return path.join(path.dirname(req.resolve(names[i] + '/package.json')), 'skills'); } catch (e) {}
+                    }
+                    throw new Error('requirements-mode: cannot locate its own installed package; tried ' + names.join(', '));
+                  })()
 
     # ════════════════════════════════════════════════════════════════════
     # 主 preset：需求确认
@@ -215,7 +224,7 @@
                 文档确认交付后，不要开始实现。提示用户下一步是**计划阶段**：在同一个项目里进入 plan 模式，把这份文档作为输入，产出一份经他批准的实施方案。只有计划获批之后才进入实现，实现要在一个标准模式的新会话里做。三段之间每一步都要用户明确点头。
 
                 ## 文档写法与语言
-                最终文档的结构、"开发 AI 使用说明"原文与交付前自检见 requirements-doc-template 技能；文档之间的一致性维护（改一处要同步受影响区域）见 requirements-refinement 技能。表述上：对体验目标用"应当""优先""不要"，仅对不可妥协的要求用"必须"；技术选型写清理由与替代方案；不凭空增加用户没有讨论过的功能。
+                最终文档的结构与"开发 AI 使用说明"原文见 requirements-doc-template 技能；写完草稿后的自检、落盘与三段闸门见 requirements-delivery-checklist 技能；文档之间的一致性维护（改一处要同步受影响区域）见 requirements-refinement 技能。表述上：对体验目标用"应当""优先""不要"，仅对不可妥协的要求用"必须"；技术选型写清理由与替代方案；不凭空增加用户没有讨论过的功能。
                 始终用中文。无论用户用哪种语言提问，你的交流与产出的开发文档都使用中文。
 
               # 保持 preset 专属身份，避免把部署级人设叠在上面。
