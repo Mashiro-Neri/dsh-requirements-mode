@@ -153,6 +153,7 @@ for (const dirent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
 const NOT_SKILLS = new Set([
   'requirements-mode', 'requirements',
   'requirements-explore', 'requirements-review',
+  'requirements-hide-internal-presets',
 ]);
 for (const token of new Set(text.match(/\brequirements-[a-z0-9-]+\b/g) || [])) {
   if (NOT_SKILLS.has(token)) continue;
@@ -192,6 +193,19 @@ for (const block of presetBlocks) {
   if (!hasTool || !hasFs) {
     note(block.start, `preset "${block.id}" tells the agent to use ${named.join(', ')} ` +
       `but does not mount ${!hasTool ? 'tool-skill' : 'skill-filesystem'}`);
+  }
+}
+
+// 7) every preset except the mode itself is internal plumbing, so the roster
+// shim must list it — otherwise a new child preset silently reappears in the
+// mode picker.
+const shimPath = path.join(__dirname, '..', 'plugin', 'hide-internal-presets.js');
+const shim = fs.existsSync(shimPath) ? fs.readFileSync(shimPath, 'utf8') : '';
+const declaredIds = [...declared.keys()];
+for (const id of declaredIds) {
+  if (id === 'requirements') continue;
+  if (shim !== '' && !shim.includes(`'${id}'`)) {
+    warnings.push(`preset "${id}" is not listed in plugin/hide-internal-presets.js — it will show up as a mode`);
   }
 }
 
