@@ -116,7 +116,9 @@ Three agent presets:
 - **`requirements-explore`** — the investigator's persona and tools (files, search, web, shell).
 - **`requirements-review`** — the reviewer's persona and tools (the same set, plus skills — it loads its own checklist).
 
-The last two are internal plumbing, not modes to start a chat in; they appear in the mode list because a preset is a preset. Leave them alone.
+The last two are internal plumbing, not modes to start a chat in. DSH's preset registry has no notion of a hidden preset — its roster method returns every declaration — so the bundle ships a few-line plugin (`plugin/hide-internal-presets.js`) that wraps that one Web-facing method and drops those two ids. The registry itself is untouched, so delegation still resolves them.
+
+That plugin is a shim: if a future DSH release renames the method, it stops working silently and the two cards reappear, with the mode unaffected. A clean fix needs an upstream "internal preset" marker.
 
 The mode mounts no sub-agent runtime and no shell executor of its own — the host plane already provides both, and a second copy collides with it.
 
@@ -233,7 +235,9 @@ The seven skills and the two child presets go with it; nothing to clean up separ
 ```
 .
 ├── package.json               declares this as a DSH bundle
-├── cordis.patch.yml           the actual plugin: three preset declarations
+├── cordis.patch.yml           the actual plugin: three preset declarations + the roster shim
+├── plugin/
+│   └── hide-internal-presets.js   filters the two child presets out of the mode picker
 ├── skills/                    the seven skills
 ├── scripts/
 │   ├── build-package.ps1      packs dist/*.tgz

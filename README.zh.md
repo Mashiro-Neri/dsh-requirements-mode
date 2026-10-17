@@ -116,7 +116,9 @@ plugin_manager
 - **`requirements-explore`**：调查员的人格与工具面（文件、搜索、联网、shell）。
 - **`requirements-review`**：复核者的人格与工具面（同样这一套）。
 
-后两个是内部零件，不是拿来开聊的模式；它们会出现在模式列表里，因为 preset 就是 preset。别选它们。
+后两个是内部零件，不是拿来开聊的模式。DSH 的 preset 注册表没有"隐藏"概念——它的花名册方法返回全部声明——所以包里带了一个几行的小插件（`plugin/hide-internal-presets.js`），只包装 Web 花名册那一个方法，把这两个 id 过滤掉。注册表本身不动，委派工具照样解析得到它们。
+
+这个插件是补丁性质：如果将来 DSH 改了那个方法名，它会静默失效，两张卡重新出现，但模式本身不受影响。真要干净，得给上游提一个"内部 preset"标记。
 
 模式本身不挂子 Agent 运行时，也不挂 shell 执行器——宿主平面已经提供这两样，再挂一份会和它撞名。
 
@@ -232,7 +234,9 @@ plugin_manager
 ```
 .
 ├── package.json              声明这是个 DSH 组合包
-├── cordis.patch.yml          插件的实际内容，三条 preset 声明
+├── cordis.patch.yml          插件的实际内容，三条 preset 声明 + 花名册补丁
+├── plugin/
+│   └── hide-internal-presets.js   把两个子级 preset 从模式选择器里过滤掉
 ├── skills/                   七个技能
 ├── scripts/
 │   ├── build-package.ps1     打成 dist/*.tgz

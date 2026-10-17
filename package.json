@@ -21,6 +21,7 @@
   },
   "files": [
     "cordis.patch.yml",
+    "plugin",
     "skills",
     "README.md",
     "README.zh.md"

@@ -1,9 +1,11 @@
 # 需求确认模式（Requirements mode）——一个 out-of-tree bundle
 #
-# 本补丁插入三条 `@deepseek-ai/dsh-agent-preset` 声明：
-#   1. requirements-explore  子级 preset：调查员（内部用，别直接选）
-#   2. requirements-review   子级 preset：复核者（内部用，别直接选）
+# 本补丁插入三条 `@deepseek-ai/dsh-agent-preset` 声明，外加一个花名册补丁：
+#   1. requirements-explore  子级 preset：调查员（内部用）
+#   2. requirements-review   子级 preset：复核者（内部用）
 #   3. requirements          主 preset：「需求确认」模式本体
+#   4. requirements-hide-internal-presets  把上面两个子级 preset 从 Web 花名册里过滤掉
+#      （DSH 没有"隐藏 preset"概念，只能包一层花名册方法；注册表本身不动）
 #
 # 为什么要三个 preset：从 DSH 0.2.1 起，`dsh-tool-subagent` 不再接受 `persona`
 # 与 `toolFilter` 配置（加载时会直接报迁移错误），子 agent 的人格与工具面
@@ -307,3 +309,13 @@
               provider: spawn
               toolName: subagent_review
               agentPreset: requirements-review
+
+    # ════════════════════════════════════════════════════════════════════
+    # 从模式选择器里隐藏两个子级 preset
+    # ════════════════════════════════════════════════════════════════════
+    # `agent-presets` 没有"隐藏"概念：花名册方法返回全部声明，所以上面两个
+    # 子级 preset 会像普通模式一样出现在列表里。这个插件只包装花名册方法，
+    # 注册表本身不动——委派工具仍然解析得到它们。
+    # 相对路径以本补丁文件所在目录为准。
+    - id: requirements-hide-internal-presets
+      name: './plugin/hide-internal-presets.js'
