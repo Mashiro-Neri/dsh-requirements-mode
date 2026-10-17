@@ -161,6 +161,40 @@ for (const token of new Set(text.match(/\brequirements-[a-z0-9-]+\b/g) || [])) {
   }
 }
 
+// 6) a preset whose persona names a skill must be able to load skills:
+// without tool-skill + skill-filesystem the instruction is a dead end.
+//
+// Note: the `rows` scan above stops at the first nested `- id:` row (plugin
+// rows), so preset blocks are collected separately here — from a declaration
+// line down to the next declaration line.
+const presetBlocks = [];
+{
+  const declRe = /^\s{0,6}- id:\s*(preset-[\w-]+)\s*$/;
+  let cur = null;
+  lines.forEach((line, i) => {
+    const m = declRe.exec(line);
+    if (m) {
+      if (cur) cur.end = i;
+      cur = { id: m[1], start: i + 1, body: [line], end: lines.length };
+      presetBlocks.push(cur);
+      return;
+    }
+    if (cur) cur.body.push(line);
+  });
+}
+
+for (const block of presetBlocks) {
+  const mouth = block.body.join('\n');
+  const named = [...skillNames].filter((s) => mouth.includes(s));
+  if (named.length === 0) continue;
+  const hasTool = mouth.includes('dsh-tool-skill');
+  const hasFs = mouth.includes('dsh-skill-filesystem');
+  if (!hasTool || !hasFs) {
+    note(block.start, `preset "${block.id}" tells the agent to use ${named.join(', ')} ` +
+      `but does not mount ${!hasTool ? 'tool-skill' : 'skill-filesystem'}`);
+  }
+}
+
 const allToolRows = rows.filter((r) => r.rowId.startsWith('tool-subagent')).map((r) => r.rowId);
 
 console.log(`declared presets: ${[...declared.keys()].join(', ') || '(none)'}`);

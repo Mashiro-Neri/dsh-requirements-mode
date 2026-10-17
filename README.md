@@ -259,7 +259,7 @@ There's also a check worth running after touching the preset:
 node scripts/check-composition.cjs
 ```
 
-It verifies that every `agentPreset` a delegation row points at is declared in the same file, that no removed fields (`persona`, `toolFilter`, `backgroundMode`, `enableRunInBackground`) are still configured, and that child presets don't mount delegation tools. Each of those has shipped once and each cost a restart plus a round of guessing, because a broken preset simply disappears from the mode picker.
+It verifies that every `agentPreset` a delegation row points at is declared in the same file, that no removed fields (`persona`, `toolFilter`, `backgroundMode`, `enableRunInBackground`) are still configured, that child presets don't mount delegation tools, that each skill directory matches its frontmatter name and stays under the 8 KB cap, and that any preset whose persona names a skill actually mounts `tool-skill` + `skill-filesystem`. The first three have each shipped once, and each cost a restart plus a round of guessing, because a broken preset simply disappears from the mode picker.
 
 The packaging script is deliberately ASCII-only: Windows PowerShell 5.1 decodes BOM-less files using the system codepage, and non-ASCII characters break it outright.
 

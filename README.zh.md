@@ -259,7 +259,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build-package.ps1
 node scripts/check-composition.cjs
 ```
 
-它检查三件事：委派工具指向的 `agentPreset` 是否在同一份文件里声明、有没有还留着已删除的字段（`persona` / `toolFilter` / `backgroundMode` / `enableRunInBackground`）、子级 preset 有没有挂委派工具（挂上就能无限递归）。这三类错各自都上线过一次，每次都要重启加一轮猜谜，因为坏掉的 preset 会直接从模式选择器里消失。
+它检查五类事：委派工具指向的 `agentPreset` 是否在同一份文件里声明；有没有还留着已删除的字段（`persona` / `toolFilter` / `backgroundMode` / `enableRunInBackground`）；子级 preset 有没有挂委派工具（挂上就能无限递归）；每个技能目录的 frontmatter 名字是否与目录一致、体积是否低于 8 KB 上限；以及"人格里提到某个技能、却没挂 `tool-skill` + `skill-filesystem`"这种死路。前三类各自都上线过一次，每次都要重启加一轮猜谜，因为坏掉的 preset 会直接从模式选择器里消失。
 
 打包脚本特意只用 ASCII 字符：Windows PowerShell 5.1 读取没有 BOM 的文件时会按系统代码页解码，写中文会直接报语法错误。
 
