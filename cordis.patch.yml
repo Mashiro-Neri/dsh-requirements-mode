@@ -250,17 +250,25 @@
           # 技能发现必须自带 provider：宿主根那份 skill-filesystem 是 disabled，
           # 各 preset 自己挂一份（provider 按 preset 作用域提供）。只挂 tool-skill
           # 而没有 provider，技能目录是空的，skill 工具会报 "unknown or no longer available"。
-          # customSkillDirs 指向本 bundle 自带的 skills/，用 baseUrl 从本包自身解析
-          # （官方 preset 用的同一手法），所以装一个包就够，不用手工复制技能。
+          # customSkillDirs 指向本 bundle 自带的 skills/。这里不能一次写死规范包名：
+          # baseUrl 是 **profile 目录**，而本包在 profile 里可能被装成别名（本机就是
+          # `@local/dsh-requirements-mode`），按规范包名解析会 MODULE_NOT_FOUND，
+          # 症状是技能静默不出现、只有 ~/.dsh/skills 的旧副本在生效。
+          # 所以按候选名依次尝试，全失败时抛出可读错误。
           - id: skill-filesystem
             name: '@deepseek-ai/dsh-skill-filesystem'
             config:
               customSkillDirs:
                 - !!js >-
-                  process.getBuiltinModule('node:path').join(
-                    process.getBuiltinModule('node:path').dirname(
-                      process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@dsh-community/dsh-requirements-mode/package.json')
-                    ), 'skills')
+                  (function () {
+                    var path = process.getBuiltinModule('node:path');
+                    var req = process.getBuiltinModule('node:module').createRequire(baseUrl);
+                    var names = ['@dsh-community/dsh-requirements-mode', '@local/dsh-requirements-mode'];
+                    for (var i = 0; i < names.length; i++) {
+                      try { return path.join(path.dirname(req.resolve(names[i] + '/package.json')), 'skills'); } catch (e) {}
+                    }
+                    throw new Error('requirements-mode: cannot locate its own installed package; tried ' + names.join(', '));
+                  })()
           - id: tool-todo
             name: '@deepseek-ai/dsh-tool-todo'
             config:
