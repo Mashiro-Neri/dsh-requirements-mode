@@ -93,8 +93,15 @@ if ($LASTEXITCODE -ne 0) { Fail "git push $tag failed." }
 $notesFile = [System.IO.Path]::GetTempFileName()
 try {
   [System.IO.File]::WriteAllText($notesFile, $notes, (New-Object System.Text.UTF8Encoding($false)))
-  $exists = & gh release view $tag 2>$null
-  if ($LASTEXITCODE -eq 0) {
+  # Windows PowerShell 5.1 turns a native command's stderr into a terminating
+  # error while ErrorActionPreference is Stop, so probe with Continue and read
+  # the exit code instead.
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  & gh release view $tag 2>$null | Out-Null
+  $exists = $LASTEXITCODE -eq 0
+  $ErrorActionPreference = $previous
+  if ($exists) {
     & gh release edit $tag --title $tag --notes-file $notesFile
     if ($LASTEXITCODE -ne 0) { Fail "gh release edit $tag failed." }
     Write-Output "Updated existing GitHub release $tag."
