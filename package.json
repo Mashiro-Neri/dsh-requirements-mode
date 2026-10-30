@@ -1,10 +1,18 @@
 {
   "name": "@dsh-community/dsh-requirements-mode",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "description": "Requirements mode for DSH: a discuss-only agent preset that clarifies a feature and produces a development document without starting implementation. 需求确认模式。",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mashiro-Neri/dsh-requirements-mode.git"
+  },
+  "homepage": "https://github.com/Mashiro-Neri/dsh-requirements-mode#readme",
+  "bugs": {
+    "url": "https://github.com/Mashiro-Neri/dsh-requirements-mode/issues"
+  },
   "keywords": [
     "dsh",
     "dsh-bundle",
@@ -23,8 +31,10 @@
     "cordis.patch.yml",
     "plugin",
     "skills",
+    "contract",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "CHANGELOG.md"
   ],
   "dsh": {
     "bundle": {

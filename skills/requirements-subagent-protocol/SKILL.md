@@ -16,7 +16,7 @@ description: 需求确认模式下两个子 Agent（subagent_explore / subagent_
 - 两个角色的人格与工具面写死在预设里（`requirements-explore` / `requirements-review`），
   调用时**不能**再传 persona 或工具列表。
 
-可用参数只有：`description`（3–5 个词的显示名）、`prompt`（必填）、可选 `cwd`。
+可用参数：`description`（3–5 个词的显示名）、`prompt`（必填）、可选 `cwd`；宿主配了子 agent 模型策略时还会多出 `provider` / `model` / `reasoning_effort`，需要省钱时可以给复核这种活指定便宜模型。
 `prompt` 要写成**自包含**的：子 agent 看不到你和用户的对话。
 
 ## 二、续聊：`send_message`
@@ -29,7 +29,7 @@ send_message(agent_id: <childId>, message: ...)
 - **空闲**的子 agent：这条消息会让它开始新一轮。
 - 只有**直接子级**可以冷恢复（结束之后仍然能续）；外部后端（Codex / Claude Code / ACP / SDK）不接受后续消息。
 
-如果参数名是 `target` 而不是 `agent_id`，那是**另一个工具**（Agent Teams 插件的），发不到这里的子 agent——把这条报给用户让他关掉那个插件，同时改用 `agent_id` 重试。
+如果参数名是 `target` 而不是 `agent_id`，说明当前会话拿到的是「智能体团队」插件的同名工具，它发不到这里的子 agent。用 `agent_id` 重试一次；仍然不行就检查 preset 里 `tool-subagent-control` 这一行是否启用，或者让用户确认 DSH 版本（0.2.1 起 preset 作用域的注册会覆盖全局同名工具）。
 
 ## 三、调查员 `subagent_explore`
 
@@ -60,7 +60,7 @@ send_message(agent_id: <childId>, message: ...)
 |---|---|---|
 | `tool-subagent: persona is no longer supported` / `toolFilter is no longer supported` | 配置里还留着旧字段 | 改 `cordis.patch.yml`：人格与工具面搬到子级 preset，用 `agentPreset` 指过去 |
 | `service "..." has been registered at ...` | preset 里重复挂了宿主已有的服务（如 `shell`、`subagents`） | 删掉那几行；只挂工具，不挂执行器/运行时 |
-| `active teammate "<id>" not found` | 调到了 Agent Teams 的同名工具（参数 `target`） | 改用 `agent_id`；提醒用户关掉那个插件 |
+| `active teammate "<id>" not found` | 调到了 Agent Teams 的同名工具（参数 `target`） | 改用 `agent_id` 重试；仍失败再检查 preset 的 `tool-subagent-control` 行是否启用 |
 | `agent "<id>" is not a resident continuable child and cannot send to parent` | **子 agent 想主动推给父级**，而它已不在活跃表里 | 这是方向限制，不是故障；结果会通过完成通知送达，**不要修** |
 | 创建直接失败且没有明确报错 | preset 可能整体挂了 | 让用户去 设置 →「模式」看那张卡片上的"加载失败"原因——那是唯一能看到错误文本的地方 |
 

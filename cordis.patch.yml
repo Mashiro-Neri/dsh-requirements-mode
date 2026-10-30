@@ -205,6 +205,8 @@
 
                 要点：先写出这一轮具体的调查计划；一次只派一组相关问题；核对它带回的**原文证据**而不是只看结论；它标注为"推断"或"未能确认"的内容，你要么自己核实、要么留给用户核实，不要直接当事实用。怎么派活、`send_message` 的参数、时序与报错处置——见 requirements-subagent-protocol 技能。
 
+                如果会话里还看得见 `spawn_teammate`、`team_task_*`、`wait_agent` 这些工具，那是「智能体团队」插件的全局工具。**本模式用不了它们**：你的 `send_message` 只发给调查员和复核者（参数 `agent_id`），发给队友会失败。委派一律走 `subagent_explore` 和 `subagent_review`。
+
                 不要在本阶段跑测试：装依赖、构建、框架脚手架、写临时文件做实验，都不属于这里。要真跑测试时告诉用户那属于实现阶段，需要标准模式（有 shell、可写工作区）的会话。
 
                 ## 交接与实施纪律
@@ -219,6 +221,7 @@
                 4. 申辩之后仍成立的意见才去见用户：逐条回报（接受并改／有理有据地驳回／回报用户裁决）。不允许静默忽略任何一条。
                 5. 修订过草稿就要**重新调用 `subagent_review` 新建复核者**。理由：同一个复核者看过上一版、提过意见，再看新版会倾向于确认"我的意见被采纳了"，而不是重新证伪。轮数上限见下。
                 6. 通过后才写最终文档，并提醒用户把 `/permission` 切回可写模式，否则写盘会被沙箱拒绝。
+                7. 写文档前问一句：**要不要把实现契约一起放进项目？**（契约随本包分发，见 requirements-delivery-checklist 技能第三节）。用户要才把整个 `contract/` 复制到项目根 `ai-contract/`，默认不要。**写 `AGENTS.md` 入口要单独再问一次**——那是在改项目根文件。**不要在讨论阶段初始化 `PROJECT_PROFILE.md` / `REVIEW.md` / `delivery.config.json`**，那是实现会话首次进入项目时的事，现在建只会留下空壳。
                 复核者不能向用户提问，所以它发现的"该由用户决定的事"必须由你回报用户。
                 轮数上限：最多重开 4 轮（即新建复核者 4 次）。到上限仍不通过就停下，把未解决的问题整理给用户。**不要因为"差不多行了"就自己放行**，也不要无限循环。
 
@@ -226,7 +229,7 @@
                 文档确认交付后，不要开始实现。提示用户下一步是**计划阶段**：在同一个项目里进入 plan 模式，把这份文档作为输入，产出一份经他批准的实施方案。只有计划获批之后才进入实现，实现要在一个标准模式的新会话里做。三段之间每一步都要用户明确点头。
 
                 ## 文档写法与语言
-                最终文档的结构与"开发 AI 使用说明"原文见 requirements-doc-template 技能；写完草稿后的自检、落盘与三段闸门见 requirements-delivery-checklist 技能；文档之间的一致性维护（改一处要同步受影响区域）见 requirements-refinement 技能。表述上：对体验目标用"应当""优先""不要"，仅对不可妥协的要求用"必须"；技术选型写清理由与替代方案；不凭空增加用户没有讨论过的功能。
+                最终文档的结构与"开发 AI 使用说明"原文见 requirements-doc-template 技能；写完草稿后的自检、落盘与三段闸门见 requirements-delivery-checklist 技能；文档之间的一致性维护（改一处要同步受影响区域）见 requirements-refinement 技能；用户要把开发文档交给别的 AI 实现、或问怎么防止 AI 写歪时，同样见 requirements-delivery-checklist 技能（契约文件随包分发）。表述上：对体验目标用"应当""优先""不要"，仅对不可妥协的要求用"必须"；技术选型写清理由与替代方案；不凭空增加用户没有讨论过的功能。
                 始终用中文。无论用户用哪种语言提问，你的交流与产出的开发文档都使用中文。
 
               # 保持 preset 专属身份，避免把部署级人设叠在上面。
@@ -234,6 +237,17 @@
               # 保留 runtime-context（沙箱策略、审批策略等）——它们是真实约束，
               # 缺了会让模型对当前权限产生错误认知。
               includeRuntimeContext: true
+
+          # 项目根到当前目录的 AGENTS.md / CLAUDE.md 会在第一次请求时注入。
+          # 不挂这一行，需求确认会话就看不到项目自己的约定——包括交付时写进
+          # AGENTS.md 的实现契约入口。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          # 当前时间上下文：文档里的日期、版本对比、时效性判断都要用到。
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
 
           # ── 工具面 ────────────────────────────────────────────────────────
           # shell 执行器由宿主提供，这里只挂工具（挂执行器会撞宿主的 shell 服务）。
@@ -285,6 +299,28 @@
             config:
               allowParallelInProgress: false
 
+          # ── 上下文压缩 ────────────────────────────────────────────────────
+          # 需求讨论动辄几十轮，不挂压缩的话上下文会一直涨到装不下。
+          # 压缩器是"提供 service"的行，必须和消费方一起隔离在自己的 realm 里
+          # （官方 preset 同款写法）。
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+
           # ── 子 agent 控制工具 ─────────────────────────────────────────────
           # 必须放 preset 顶层：塞进 isolate 组后工具不进会话工具面，模型会去调
           # 全局的 Agent Teams 同名工具（参数 `target`，发不到这里的子 agent）。
@@ -297,18 +333,23 @@
           # 从 DSH 0.2.1 起 persona / toolFilter / backgroundMode 都不再被接受，
           # 子 agent 的人格与工具面写在上面的两个子级 preset 里，这里只指过去。
           # 不配 allowedAgentPresets：模型不能自行换 preset，默认值固定。
+          # modelSelectionSettings：读取宿主里配置的子 agent 模型策略，允许在
+          # 派活时指定 provider / model / reasoning_effort（复核这种活可以用便宜
+          # 模型跑）。宿主没配策略时这些字段不会出现，等于没开。
           - id: tool-subagent-explore
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: spawn
               toolName: subagent_explore
               agentPreset: requirements-explore
+              modelSelectionSettings: true
           - id: tool-subagent-review
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: spawn
               toolName: subagent_review
               agentPreset: requirements-review
+              modelSelectionSettings: true
 
     # ════════════════════════════════════════════════════════════════════
     # 从模式选择器里隐藏两个子级 preset

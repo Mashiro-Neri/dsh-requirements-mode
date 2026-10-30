@@ -209,11 +209,39 @@ for (const id of declaredIds) {
   }
 }
 
+// 8) the implementation contract ships as bundle assets; a missing file would
+// leave the skill pointing at nothing, and only show up when a user asks for it.
+const contractDir = path.join(__dirname, '..', 'contract');
+const CONTRACT_FILES = [
+  'AI_DEVELOPMENT_CONTRACT.md',
+  'AI_DEVELOPMENT_CONTRACT_STANDALONE.md',
+  'APPENDIX.md',
+  'DOCUMENTATION_MAINTENANCE.md',
+  'delivery.config.example.json',
+  'templates/CHANGE_BRIEF.md',
+  'templates/EVIDENCE.md',
+  'templates/PROJECT_PROFILE.md',
+  'templates/REVIEW.md',
+];
+if (!fs.existsSync(contractDir)) {
+  note(0, 'contract/ is missing — the implementation contract ships inside the bundle');
+} else {
+  for (const rel of CONTRACT_FILES) {
+    if (!fs.existsSync(path.join(contractDir, rel))) note(0, `contract/${rel} is missing`);
+  }
+  const contractSkill = path.join(skillsDir, 'requirements-delivery-checklist', 'SKILL.md');
+  if (fs.existsSync(contractSkill) &&
+      !fs.readFileSync(contractSkill, 'utf8').includes('../../contract')) {
+    warnings.push('requirements-delivery-checklist does not point at ../../contract — its asset paths may be stale');
+  }
+}
+
 const allToolRows = rows.filter((r) => r.rowId.startsWith('tool-subagent')).map((r) => r.rowId);
 
 console.log(`declared presets: ${[...declared.keys()].join(', ') || '(none)'}`);
 console.log(`delegation rows:  ${allToolRows.join(', ') || '(none)'}`);
 console.log(`skills:           ${[...skillNames].join(', ') || '(none)'}`);
+console.log(`contract assets:  ${fs.existsSync(contractDir) ? CONTRACT_FILES.length + ' expected' : 'missing'}`);
 console.log('');
 
 for (const w of warnings) console.log('WARN  ' + w);

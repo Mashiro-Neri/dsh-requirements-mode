@@ -1,9 +1,9 @@
 ---
 name: requirements-delivery-checklist
-description: 开发文档草稿的自检清单与落盘流程——交付前逐项核对、走完复核再写文件、以及交付后指向计划/实现的三段闸门。写完草稿、准备交付时加载。
+description: 开发文档的交付流程——自检清单、落盘位置、随文档交付实现契约（风险分级/Gate/证据卡），以及交付后指向计划与实现的三段闸门。写完草稿、准备交付，或用户要把文档交给别的 AI 实现时加载。
 ---
 
-# 交付前自检与落盘
+# 交付前自检、落盘与实现契约
 
 顺序不能颠倒，尤其**不要在复核前落盘**。
 
@@ -24,13 +24,75 @@ description: 开发文档草稿的自检清单与落盘流程——交付前逐�
 复核通过（或有条件通过且条件已解决）之后才写文件：
 
 - 路径：`requirements/<项目名>-开发文档.md`（`requirements/` 不存在时创建）。
-- 除这份文档外不新增其他文件。
+- 除这份文档外不新增其他文件——**唯一例外**是用户明确要求随文档一起交付实现契约（见第三节）。
 - 写盘前提醒用户把 `/permission` 从 read-only 切回可写模式（例如 workspace-write），否则写入会被沙箱拒绝。
 - 写完报告确切路径，并说明可以继续补充修改。
 
 复核环节本身的操作细节（怎么派活、怎么申辩、轮数上限）见 requirements-subagent-protocol 技能；这里不重复。
 
-## 三、交付后的三段闸门
+## 三、随文档交付实现契约
+
+本包在 `contract/` 下带了一套实现阶段的交付契约，用来约束**拿到开发文档之后写代码的那个 AI**。需求确认模式本身不实现，作用是把契约随文档交接。
+
+### 资产位置
+
+本技能所在目录向上两级就是 `contract/`（`<base>` 是技能注入的 Base directory）：
+
+- `<base>/../../contract/AI_DEVELOPMENT_CONTRACT.md` — 完整包主文档，用相对路径引用附录与模板
+- `<base>/../../contract/AI_DEVELOPMENT_CONTRACT_STANDALONE.md` — 单文件自包含版
+- `<base>/../../contract/APPENDIX.md` — 假绿映射、多 Agent、事故→eval
+- `<base>/../../contract/DOCUMENTATION_MAINTENANCE.md` — 项目文档维护规范
+- `<base>/../../contract/templates/` — 开工卡、项目画像、审查指南、证据卡
+- `<base>/../../contract/delivery.config.example.json` — verify/smoke/deploy/highRiskPaths 示例
+
+### 交付流程
+
+1. **先问一句**：写最终文档之前问用户"要不要把实现契约一起放进项目？"。这是选项，不是默认动作。
+2. 用户同意后，把整个 `contract/` 目录按相对结构复制到**项目根**，目录名默认 `ai-contract/`：
+
+   ```text
+   <项目>/
+   ├── AGENTS.md
+   ├── ai-contract/          ← 整个 contract/ 复制过来
+   └── …
+   ```
+
+   - 用 shell 复制（`cp -r` / `Copy-Item -Recurse`），复制完列出文件清单核对。
+   - 目录名可以按用户要求改，但**目录内相对结构不能变**（主文档靠相对路径找附录和模板）。
+   - 这属于"用户确认后的交付物"，不算违反"讨论阶段不落盘"。
+   - 项目只需要一个文件时，可以只复制 `AI_DEVELOPMENT_CONTRACT_STANDALONE.md` 成 `ai-contract/AI_DEVELOPMENT_CONTRACT.md`。
+3. **写入口**：在项目根 `AGENTS.md` 里加一节（已有就追加，**绝不覆盖**；没有就新建）：
+
+   ```markdown
+   ## AI 开发契约（开工前必读）
+
+   本项目实现遵循 `ai-contract/AI_DEVELOPMENT_CONTRACT.md`。
+
+   - 首次进入项目：先读 `ai-contract/README.md`，再读主契约全文；然后按契约第 12 节创建 `PROJECT_PROFILE.md`、`REVIEW.md`、`delivery.config.json`
+   - 每次开工前：至少读「启动协议」「风险分级」「Gate 出口」「禁止清单」四节
+   - 假绿映射、多 Agent、证据模板见 `ai-contract/APPENDIX.md` 与 `ai-contract/templates/`
+   ```
+
+   `AGENTS.md` 会被 DSH 在每次会话自动读取，所以这就是"最先阅读的文件"，不需要再造入口。**这一步要单独征得用户同意**——它在改项目根文件。
+4. 在开发文档开头加一行指向它：
+
+   > 实现契约：`ai-contract/AI_DEVELOPMENT_CONTRACT.md`（风险分级、Gate 流程、证据卡、独立审查；实现 AI 必须遵循）。
+
+5. 用户不要契约时：不复制、不写 AGENTS.md、也不在文档里提它。
+
+**不要在需求确认阶段初始化项目结构**：`PROJECT_PROFILE.md`、`REVIEW.md`、`delivery.config.json` 由实现会话的 AI 首次进入项目时创建。讨论阶段就建会留下一堆只有头的空项目。
+
+### 和需求确认的关系
+
+- 本模式的产出大致对应契约的 **Gate 0（Brief）**：目标、non-goals、可观察验收、风险级别、回滚方式。
+- 文档里的"可验证完成标准"要能直接变成契约的验收表：`操作/命令 → 期望结果 → 环境 → 通过阈值`。
+- 契约要求"实现者不能自审自批"：实现阶段必须另开 reviewer/verifier，**不能用写代码的那个 agent 自己审**。
+
+### 摘要（细节一律以契约文件为准）
+
+L0–L3 风险分级；Gate 0–5（Brief → 实现 → 自检+证据 → 独立审查 → 部署回滚 → 收尾）；证据必须绑定 commit 与原始输出；`verified` 只能由独立验证者写。
+
+## 四、交付后的三段闸门
 
 交付后**不要开始实现**，而是提示用户走完剩下两道闸门：
 
