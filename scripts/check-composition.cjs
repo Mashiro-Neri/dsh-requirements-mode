@@ -236,12 +236,33 @@ if (!fs.existsSync(contractDir)) {
   }
 }
 
+// 9) the large-project route ships a playbook and the acceptance workflow;
+// a missing file leaves the skill pointing at nothing until a user asks for it.
+const ASSET_FILES = [
+  ['playbooks/large-project-planning.md', 'playbook'],
+  ['acceptance/README.md', 'acceptance workflow'],
+  ['acceptance/ACCEPTANCE_PLAN.md', 'acceptance template'],
+];
+const missingAssets = [];
+for (const [rel, label] of ASSET_FILES) {
+  if (!fs.existsSync(path.join(__dirname, '..', rel))) {
+    missingAssets.push(rel);
+    note(0, `${label} is missing: ${rel}`);
+  }
+}
+const largeSkill = path.join(skillsDir, 'requirements-large-project', 'SKILL.md');
+if (fs.existsSync(largeSkill) &&
+    !fs.readFileSync(largeSkill, 'utf8').includes('../../playbooks/large-project-planning.md')) {
+  warnings.push('requirements-large-project does not point at ../../playbooks/large-project-planning.md');
+}
+
 const allToolRows = rows.filter((r) => r.rowId.startsWith('tool-subagent')).map((r) => r.rowId);
 
 console.log(`declared presets: ${[...declared.keys()].join(', ') || '(none)'}`);
 console.log(`delegation rows:  ${allToolRows.join(', ') || '(none)'}`);
 console.log(`skills:           ${[...skillNames].join(', ') || '(none)'}`);
 console.log(`contract assets:  ${fs.existsSync(contractDir) ? CONTRACT_FILES.length + ' expected' : 'missing'}`);
+console.log(`playbook assets:  ${missingAssets.length === 0 ? ASSET_FILES.length + ' expected' : missingAssets.join(', ') + ' missing'}`);
 console.log('');
 
 for (const w of warnings) console.log('WARN  ' + w);

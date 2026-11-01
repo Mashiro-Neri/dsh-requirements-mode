@@ -30,13 +30,13 @@ No tool is removed — it has what you have. The constraints are workflow rules:
 
 One bundle:
 
-**A mode** (an agent preset) — the standing workflow, the usual tools, and two delegation tools. The workflow text is about 2,800 characters and rides on every request.
+**A mode** (an agent preset) — the standing workflow, the usual tools, and two delegation tools. The workflow text is about 3,800 characters and rides on every request.
 
 **Two sub-agents**, each its own preset: an investigator and a reviewer. They are hidden from the mode picker and reached through the delegation tools.
 
-**Seven skills**, loaded only when needed: approach comparison, questions by project type, questioning and the confirmation ledger, the document skeleton, the delivery checklist, the review rubric, and the sub-agent protocol.
+**Eight skills**, loaded only when needed: approach comparison, questions by project type, questioning and the confirmation ledger, the document skeleton, the delivery checklist, the review rubric, the sub-agent protocol, and the large-project route.
 
-**An implementation contract** (optional — see below).
+**Three asset sets**: the implementation contract (optional handoff), the large-project planning playbook, and the acceptance workflow (the last two are used by the large-project route).
 
 ## Install
 
@@ -92,6 +92,46 @@ To check something on the real machine, just ask — "which version is installed
 A call returns `started subagent <childId>` immediately; the answer arrives later as a completion notice, and `send_message(agent_id: …)` continues the same child. After revising the document, start a **new** reviewer — one that already saw the previous version tends to confirm its own feedback was adopted.
 
 Each child's model can be chosen per call: when the host has a sub-agent model policy, the tools expose `provider`, `model` and `reasoning_effort`, so a review that needs no deep reasoning can run on a cheaper model.
+
+## The large-project route
+
+The default is the short route: four stages, one eight-section development document. The number of files is not preset — only when the content genuinely does not fit does it split into a second document (usually acceptance or an appendix).
+
+When a project spans several systems, devices or roles, mostly reuses an existing system instead of rewriting it, or is expensive to get wrong once, the mode asks whether to take the large-project route. The default is no; hesitation means the short route.
+
+The large route has nine stages:
+
+```
+intent → reality check → concept definition → invariants → refutation and
+eight-perspective red team → state semantics → splitting → decision freeze → acceptance
+```
+
+Each stage has an artifact and a gate. Highlights:
+
+- **Reality check** sends the investigator to inventory existing capabilities — "already exists / current semantics / gap / reuse or rebuild" — instead of designing them again
+- **Red team** runs eight perspectives in one agent, then hands security and chaos engineering to an independent reviewer; every refutation goes into a ledger, convergence has explicit criteria, and the same question gets at most three rounds
+- **State semantics** separate "nobody present / timeout / unknown outcome / offline / approval not delivered", with side effects modelled separately
+- **Acceptance** follows the evidence-card model; only an independent verifier can write `verified`
+
+The deliverable is a set of files, packaged as a zip:
+
+```
+requirements/<project>-planning/
+  README.md               file index and SHA256
+  00-planning-document.md 17 sections
+  01-refutation-ledger.md
+  02-decision-log.md      ADRs plus review triggers
+  03-acceptance/
+    README.md             acceptance workflow and verdicts
+    acceptance-plan.md
+    evidence-card.md
+    implementation-contract/   included by default
+  04-risks-and-triggers.md
+```
+
+Acceptance is not a single file but a folder: the workflow, the plan, the evidence card, and the implementation contract. The previous version's acceptance model (risk tiers, gates, evidence cards, independent review) lives there and ships by default.
+
+The whole route is documented in `playbooks/large-project-planning.md`, distilled from a real project retrospective.
 
 ## The bundled implementation contract
 
@@ -157,7 +197,7 @@ git config --global http.sslBackend schannel
 
 Ask DSH to call `plugin_manager` with `action: remove_bundle` and `target` set to `@dsh-community/dsh-requirements-mode`.
 
-The seven skills and the two child presets go with it; nothing to clean up separately.
+The eight skills and the two child presets go with it; nothing to clean up separately.
 
 ## Layout
 
@@ -167,8 +207,13 @@ The seven skills and the two child presets go with it; nothing to clean up separ
 ├── cordis.patch.yml           three preset declarations + the roster shim
 ├── plugin/
 │   └── hide-internal-presets.js   filters the two child presets out of the mode picker
-├── skills/                    the seven skills
+├── skills/                    the eight skills
 ├── contract/                  the implementation contract (main doc, appendix, templates, config example)
+├── playbooks/
+│   └── large-project-planning.md   the nine-stage large-project template
+├── acceptance/
+│   ├── README.md              acceptance workflow: process, verdicts, prohibitions
+│   └── ACCEPTANCE_PLAN.md     acceptance plan template
 ├── scripts/
 │   ├── build-package.ps1      packs dist/*.tgz
 │   ├── check-composition.cjs  pre-restart structural checks
@@ -197,7 +242,7 @@ After touching the preset, run the structural check:
 node scripts/check-composition.cjs
 ```
 
-It verifies that every `agentPreset` a delegation row points at is declared in the same file, that no removed fields (`persona`, `toolFilter`, `backgroundMode`, `enableRunInBackground`) are still configured, that child presets don't mount delegation tools, that each skill directory matches its frontmatter name and stays under the 8 KB cap, that any preset whose persona names a skill actually mounts `tool-skill` + `skill-filesystem`, and that the bundled contract assets are all present. Several of these have shipped broken once, and each cost a restart plus a round of guessing, because a broken preset simply disappears from the mode picker.
+It verifies that every `agentPreset` a delegation row points at is declared in the same file, that no removed fields (`persona`, `toolFilter`, `backgroundMode`, `enableRunInBackground`) are still configured, that child presets don't mount delegation tools, that each skill directory matches its frontmatter name and stays under the 8 KB cap, that any preset whose persona names a skill actually mounts `tool-skill` + `skill-filesystem`, and that the bundled assets (implementation contract, large-project playbook, acceptance workflow) are all present. Several of these have shipped broken once, and each cost a restart plus a round of guessing, because a broken preset simply disappears from the mode picker.
 
 Preset and skill-directory changes need a DSH restart; skill bodies are hot-reloaded.
 

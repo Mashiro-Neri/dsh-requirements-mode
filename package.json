@@ -1,6 +1,6 @@
 {
   "name": "@dsh-community/dsh-requirements-mode",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "Requirements mode for DSH: a discuss-only agent preset that clarifies a feature and produces a development document without starting implementation. 需求确认模式。",
@@ -32,6 +32,8 @@
     "plugin",
     "skills",
     "contract",
+    "playbooks",
+    "acceptance",
     "README.md",
     "README.zh.md",
     "CHANGELOG.md"
